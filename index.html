@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Apple Music Editorial Video Finder</title>
+  <title>Apple Music Editorial Stream Extractor</title>
   <style>
     :root {
       --bg-color: #0f0f12;
@@ -13,6 +13,7 @@
       --text-main: #f5f5f7;
       --text-muted: #8e8e93;
       --border-color: #2c2b36;
+      --badge-bg: #272533;
     }
 
     * {
@@ -26,11 +27,9 @@
       background-color: var(--bg-color);
       color: var(--text-main);
       min-height: 100vh;
-      display: flex;
-      flex-direction: column;
     }
 
-    /* Main Container with dynamic layout transition for desktop */
+    /* Layout Transitions */
     .app-layout {
       width: 100%;
       max-width: 1400px;
@@ -43,7 +42,7 @@
       transition: all 0.3s ease;
     }
 
-    /* Centered initial state for desktop */
+    /* Initial centered desktop layout */
     .app-layout.initial {
       justify-content: center;
       align-items: center;
@@ -51,14 +50,14 @@
 
     .app-layout.initial .search-panel {
       width: 100%;
-      max-width: 550px;
+      max-width: 520px;
     }
 
-    /* Desktop split-view (side-by-side) when results exist */
+    /* Desktop split-screen when results exist */
     @media (min-width: 900px) {
       .app-layout.has-results {
         display: grid;
-        grid-template-columns: 360px 1fr;
+        grid-template-columns: 350px 1fr;
         align-items: start;
       }
 
@@ -69,7 +68,7 @@
     }
 
     header {
-      margin-bottom: 1.5rem;
+      margin-bottom: 1.25rem;
       text-align: left;
     }
 
@@ -85,16 +84,15 @@
 
     header p {
       color: var(--text-muted);
-      font-size: 0.9rem;
+      font-size: 0.85rem;
     }
 
-    /* Search Form Card */
     .search-panel {
       background-color: var(--card-bg);
       border: 1px solid var(--border-color);
       border-radius: 16px;
       padding: 1.5rem;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
     }
 
     .form-grid {
@@ -111,7 +109,7 @@
     }
 
     .form-group label {
-      font-size: 0.8rem;
+      font-size: 0.75rem;
       color: var(--text-muted);
       font-weight: 600;
       text-transform: uppercase;
@@ -183,7 +181,7 @@
       background: var(--accent-hover);
     }
 
-    /* Results container */
+    /* Results */
     .results-container {
       display: flex;
       flex-direction: column;
@@ -191,7 +189,6 @@
       width: 100%;
     }
 
-    /* Card Item */
     .album-card {
       background: var(--card-bg);
       border: 1px solid var(--border-color);
@@ -236,7 +233,7 @@
       margin-bottom: 0.2rem;
     }
 
-    /* Video Items */
+    /* Video Section */
     .videos-section {
       border-top: 1px solid var(--border-color);
       padding-top: 1rem;
@@ -245,35 +242,34 @@
     .videos-section h3 {
       font-size: 0.95rem;
       margin-bottom: 0.75rem;
-      color: var(--text-main);
     }
 
     .video-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-      gap: 0.75rem;
-    }
-
-    @media (min-width: 600px) {
-      .video-grid {
-        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-      }
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 1rem;
     }
 
     .video-card {
       background: #121118;
       border: 1px solid var(--border-color);
-      border-radius: 8px;
+      border-radius: 10px;
       overflow: hidden;
       display: flex;
       flex-direction: column;
+    }
+
+    .video-preview-wrap {
+      position: relative;
+      width: 100%;
+      background-color: #000;
     }
 
     .video-preview {
       width: 100%;
       aspect-ratio: 1;
       object-fit: cover;
-      background-color: #000;
+      display: block;
     }
 
     .video-card.tall .video-preview {
@@ -281,36 +277,86 @@
     }
 
     .video-details {
-      padding: 0.5rem;
+      padding: 0.85rem;
       display: flex;
       flex-direction: column;
-      gap: 0.4rem;
-      flex-grow: 1;
-      justify-content: space-between;
+      gap: 0.6rem;
     }
 
     .video-title {
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: var(--text-muted);
+      font-size: 0.85rem;
+      font-weight: 700;
       text-transform: capitalize;
     }
 
+    .quality-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      max-height: 220px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .quality-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--badge-bg);
+      padding: 0.4rem 0.6rem;
+      border-radius: 6px;
+      font-size: 0.78rem;
+    }
+
+    .quality-info {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .quality-res {
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .quality-meta {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+
     .btn-open {
-      display: block;
-      text-align: center;
-      background: rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.12);
       color: var(--text-main);
       text-decoration: none;
-      padding: 0.4rem;
-      border-radius: 6px;
-      font-size: 0.8rem;
+      padding: 0.3rem 0.6rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
       font-weight: 600;
       transition: background 0.2s;
+      white-space: nowrap;
     }
 
     .btn-open:hover {
       background: var(--accent);
+    }
+
+    .btn-master {
+      display: block;
+      text-align: center;
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      text-decoration: none;
+      padding: 0.5rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-top: 0.4rem;
+      transition: all 0.2s;
+    }
+
+    .btn-master:hover {
+      border-color: var(--text-muted);
+      color: var(--text-main);
     }
 
     .status-msg {
@@ -328,8 +374,8 @@
   <div id="layout" class="app-layout initial">
     <div class="search-panel">
       <header>
-        <h1>Editorial Finder</h1>
-        <p>Search Apple Music catalog for albums and editorial video streams.</p>
+        <h1>Editorial Stream Finder</h1>
+        <p>Extract HLS streams and MP4 variants from Apple Music videos.</p>
       </header>
 
       <div class="form-grid">
@@ -349,7 +395,7 @@
 
       <div class="options-row">
         <div class="format-selector">
-          <label>Target Format:</label>
+          <label>Target Stream Format:</label>
           <div class="radio-group">
             <label><input type="radio" name="format" value="m3u8" checked> .m3u8</label>
             <label><input type="radio" name="format" value="mp4"> .mp4</label>
@@ -368,12 +414,48 @@
       return rawUrl.replace('{w}', width).replace('{h}', height);
     }
 
-    function processVideoLink(url, targetFormat) {
+    // Convert individual quality stream links inside playlist
+    function processStreamUrl(url, targetFormat) {
       if (!url) return '';
       if (targetFormat === 'mp4') {
         return url.replace(/\.m3u8$/, '-.mp4');
       }
       return url;
+    }
+
+    // Parse M3U8 content to extract stream details and individual video URLs
+    function parseM3U8(content) {
+      const streams = [];
+      const lines = content.split('\n');
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        
+        if (line.startsWith('#EXT-X-STREAM-INF:')) {
+          const attributes = line.substring(18);
+          
+          const resMatch = attributes.match(/RESOLUTION=([0-9x]+)/);
+          const bwMatch = attributes.match(/BANDWIDTH=([0-9]+)/);
+          const codecMatch = attributes.match(/CODECS="([^"]+)"/);
+          
+          let nextUrl = '';
+          if (i + 1 < lines.length && !lines[i + 1].startsWith('#')) {
+            nextUrl = lines[i + 1].trim();
+          }
+
+          if (nextUrl) {
+            streams.push({
+              resolution: resMatch ? resMatch[1] : 'Unknown Res',
+              bandwidth: bwMatch ? Math.round(parseInt(bwMatch[1], 10) / 1024) + ' kbps' : 'N/A',
+              codec: codecMatch ? (codecMatch[1].startsWith('hvc') ? 'HEVC' : 'H.264') : 'Video',
+              url: nextUrl
+            });
+          }
+        }
+      }
+
+      // Sort streams highest resolution / bandwidth first
+      return streams.reverse();
     }
 
     async function performSearch() {
@@ -389,7 +471,6 @@
         return;
       }
 
-      // Adjust UI layout mode on search initiation
       layoutDiv.classList.remove('initial');
       layoutDiv.classList.add('has-results');
       resultsDiv.innerHTML = '<div class="status-msg">Searching catalog...</div>';
@@ -399,9 +480,8 @@
 
       try {
         const response = await fetch(requestUrl);
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        
         const data = await response.json();
         const albums = data?.results?.albums?.data || [];
 
@@ -411,41 +491,78 @@
         }
 
         resultsDiv.innerHTML = '';
-        albums.forEach(albumItem => {
-          resultsDiv.appendChild(renderAlbumCard(albumItem, selectedFormat));
-        });
+        for (const albumItem of albums) {
+          const card = await renderAlbumCard(albumItem, selectedFormat);
+          resultsDiv.appendChild(card);
+        }
 
       } catch (err) {
         console.error('Search failed:', err);
-        resultsDiv.innerHTML = `<div class="status-msg">Error querying backend. Please check network connections.</div>`;
+        resultsDiv.innerHTML = `<div class="status-msg">Error querying backend. Please check network connection.</div>`;
       }
     }
 
-    function renderAlbumCard(album, format) {
+    async function renderAlbumCard(album, format) {
       const attr = album.attributes || {};
       const card = document.createElement('div');
       card.className = 'album-card';
 
       const artworkUrl = formatUrl(attr.artwork?.url, 300, 300);
-
       let videoSectionHTML = '';
+
       if (attr.editorialVideo && Object.keys(attr.editorialVideo).length > 0) {
         let videoCardsHTML = '';
-        
+
         for (const [key, videoData] of Object.entries(attr.editorialVideo)) {
           if (!videoData.video) continue;
 
           const previewUrl = formatUrl(videoData.previewFrame?.url, 400, 400);
-          const finalVideoUrl = processVideoLink(videoData.video, format);
+          const masterUrl = videoData.video;
           const isTall = key.toLowerCase().includes('tall');
+
+          let streamsListHTML = '<div class="quality-meta">Fetching qualities...</div>';
+
+          try {
+            // Fetch playlist content to extract internal qualities
+            const playlistRes = await fetch(masterUrl);
+            if (playlistRes.ok) {
+              const playlistText = await playlistRes.text();
+              const parsedStreams = parseM3U8(playlistText);
+
+              if (parsedStreams.length > 0) {
+                streamsListHTML = parsedStreams.map(st => {
+                  const finalUrl = processStreamUrl(st.url, format);
+                  return `
+                    <div class="quality-item">
+                      <div class="quality-info">
+                        <span class="quality-res">${st.resolution}</span>
+                        <span class="quality-meta">${st.codec} • ${st.bandwidth}</span>
+                      </div>
+                      <a href="${finalUrl}" target="_blank" rel="noopener noreferrer" class="btn-open">
+                        Open ${format.toUpperCase()}
+                      </a>
+                    </div>
+                  `;
+                }).join('');
+              }
+            }
+          } catch (e) {
+            console.warn('Could not inspect playlist CORS/network:', e);
+            streamsListHTML = `<div class="quality-meta">Direct quality inspection restricted. Use default playlist link below.</div>`;
+          }
 
           videoCardsHTML += `
             <div class="video-card ${isTall ? 'tall' : ''}">
-              ${previewUrl ? `<img class="video-preview" src="${previewUrl}" alt="${key}">` : ''}
+              <div class="video-preview-wrap">
+                ${previewUrl ? `<img class="video-preview" src="${previewUrl}" alt="${key}">` : ''}
+              </div>
               <div class="video-details">
                 <span class="video-title">${key}</span>
-                <a href="${finalVideoUrl}" target="_blank" rel="noopener noreferrer" class="btn-open">
-                  Open ${format.toUpperCase()}
+                <div class="quality-list">
+                  ${streamsListHTML}
+                </div>
+                <a href="${masterUrl}" target="_blank" rel="noopener noreferrer" class="btn-master">
+                  Open Default default.m3u8
                 </a>
               </div>
             </div>
@@ -455,7 +572,7 @@
         if (videoCardsHTML) {
           videoSectionHTML = `
             <div class="videos-section">
-              <h3>Editorial Videos (${format.toUpperCase()})</h3>
+              <h3>Editorial Videos & Stream Qualities</h3>
               <div class="video-grid">
                 ${videoCardsHTML}
               </div>
