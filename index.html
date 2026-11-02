@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Apple Music Editorial Video Finder</title>
+  <style>
+    :root {
+      --bg-color: #0f0f12;
+      --card-bg: #1a1921;
+      --accent: #fa2d48;
+      --accent-hover: #ff4760;
+      --text-main: #f5f5f7;
+      --text-muted: #8e8e93;
+      --border-color: #2c2b36;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Main Container with dynamic layout transition for desktop */
+    .app-layout {
+      width: 100%;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+      min-height: 100vh;
+      transition: all 0.3s ease;
+    }
+
+    /* Centered initial state for desktop */
+    .app-layout.initial {
+      justify-content: center;
+      align-items: center;
+    }
+
+    .app-layout.initial .search-panel {
+      width: 100%;
+      max-width: 550px;
+    }
+
+    /* Desktop split-view (side-by-side) when results exist */
+    @media (min-width: 900px) {
+      .app-layout.has-results {
+        display: grid;
+        grid-template-columns: 360px 1fr;
+        align-items: start;
+      }
+
+      .app-layout.has-results .search-panel {
+        position: sticky;
+        top: 1.5rem;
+      }
+    }
+
+    header {
+      margin-bottom: 1.5rem;
+      text-align: left;
+    }
+
+    .app-layout.initial header {
+      text-align: center;
+    }
+
+    header h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-bottom: 0.4rem;
+    }
+
+    header p {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    /* Search Form Card */
+    .search-panel {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 1.5rem;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    .form-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .form-group label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .form-group input {
+      background: #0f0e14;
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .form-group input:focus {
+      border-color: var(--accent);
+    }
+
+    .options-row {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      border-top: 1px solid var(--border-color);
+      padding-top: 1.25rem;
+    }
+
+    .format-selector {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .format-selector label {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .radio-group {
+      display: flex;
+      gap: 1rem;
+    }
+
+    .radio-group label {
+      color: var(--text-main);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.9rem;
+    }
+
+    button.btn-search {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 0.85rem;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+      width: 100%;
+      transition: background 0.2s;
+    }
+
+    button.btn-search:hover {
+      background: var(--accent-hover);
+    }
+
+    /* Results container */
+    .results-container {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      width: 100%;
+    }
+
+    /* Card Item */
+    .album-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .album-header {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+    }
+
+    .album-artwork {
+      width: 90px;
+      height: 90px;
+      border-radius: 10px;
+      object-fit: cover;
+      flex-shrink: 0;
+      background-color: var(--border-color);
+    }
+
+    @media (min-width: 600px) {
+      .album-artwork {
+        width: 110px;
+        height: 110px;
+      }
+    }
+
+    .album-info h2 {
+      font-size: 1.2rem;
+      margin-bottom: 0.25rem;
+      word-break: break-word;
+    }
+
+    .album-info p {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-bottom: 0.2rem;
+    }
+
+    /* Video Items */
+    .videos-section {
+      border-top: 1px solid var(--border-color);
+      padding-top: 1rem;
+    }
+
+    .videos-section h3 {
+      font-size: 0.95rem;
+      margin-bottom: 0.75rem;
+      color: var(--text-main);
+    }
+
+    .video-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 0.75rem;
+    }
+
+    @media (min-width: 600px) {
+      .video-grid {
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      }
+    }
+
+    .video-card {
+      background: #121118;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .video-preview {
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      background-color: #000;
+    }
+
+    .video-card.tall .video-preview {
+      aspect-ratio: 3/4;
+    }
+
+    .video-details {
+      padding: 0.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      flex-grow: 1;
+      justify-content: space-between;
+    }
+
+    .video-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: capitalize;
+    }
+
+    .btn-open {
+      display: block;
+      text-align: center;
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-main);
+      text-decoration: none;
+      padding: 0.4rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+
+    .btn-open:hover {
+      background: var(--accent);
+    }
+
+    .status-msg {
+      text-align: center;
+      color: var(--text-muted);
+      padding: 2rem;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="layout" class="app-layout initial">
+    <div class="search-panel">
+      <header>
+        <h1>Editorial Finder</h1>
+        <p>Search Apple Music catalog for albums and editorial video streams.</p>
+      </header>
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="albumInput">Album / Release</label>
+          <input type="text" id="albumInput" placeholder="e.g. Heaven knows" value="Heaven knows">
+        </div>
+        <div class="form-group">
+          <label for="artistInput">Artist</label>
+          <input type="text" id="artistInput" placeholder="e.g. PinkPantheress" value="PinkPantheress">
+        </div>
+        <div class="form-group">
+          <label for="storefrontInput">Storefront</label>
+          <input type="text" id="storefrontInput" placeholder="e.g. jp" value="jp">
+        </div>
+      </div>
+
+      <div class="options-row">
+        <div class="format-selector">
+          <label>Target Format:</label>
+          <div class="radio-group">
+            <label><input type="radio" name="format" value="m3u8" checked> .m3u8</label>
+            <label><input type="radio" name="format" value="mp4"> .mp4</label>
+          </div>
+        </div>
+        <button class="btn-search" onclick="performSearch()">Search</button>
+      </div>
+    </div>
+
+    <div id="results" class="results-container"></div>
+  </div>
+
+  <script>
+    function formatUrl(rawUrl, width = 400, height = 400) {
+      if (!rawUrl) return '';
+      return rawUrl.replace('{w}', width).replace('{h}', height);
+    }
+
+    function processVideoLink(url, targetFormat) {
+      if (!url) return '';
+      if (targetFormat === 'mp4') {
+        return url.replace(/\.m3u8$/, '-.mp4');
+      }
+      return url;
+    }
+
+    async function performSearch() {
+      const album = document.getElementById('albumInput').value.trim();
+      const artist = document.getElementById('artistInput').value.trim();
+      const storefront = document.getElementById('storefrontInput').value.trim() || 'jp';
+      const selectedFormat = document.querySelector('input[name="format"]:checked').value;
+      const resultsDiv = document.getElementById('results');
+      const layoutDiv = document.getElementById('layout');
+
+      if (!album && !artist) {
+        resultsDiv.innerHTML = '<div class="status-msg">Please enter an album or artist name.</div>';
+        return;
+      }
+
+      // Adjust UI layout mode on search initiation
+      layoutDiv.classList.remove('initial');
+      layoutDiv.classList.add('has-results');
+      resultsDiv.innerHTML = '<div class="status-msg">Searching catalog...</div>';
+
+      const searchTerm = encodeURIComponent(`${album} ${artist}`.trim());
+      const requestUrl = `https://amphoreus.ejpoacc.workers.dev/v1/catalog/${encodeURIComponent(storefront)}/search?term=${searchTerm}&types=albums&extend=editorialVideo`;
+
+      try {
+        const response = await fetch(requestUrl);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        const albums = data?.results?.albums?.data || [];
+
+        if (albums.length === 0) {
+          resultsDiv.innerHTML = '<div class="status-msg">No albums found for this query.</div>';
+          return;
+        }
+
+        resultsDiv.innerHTML = '';
+        albums.forEach(albumItem => {
+          resultsDiv.appendChild(renderAlbumCard(albumItem, selectedFormat));
+        });
+
+      } catch (err) {
+        console.error('Search failed:', err);
+        resultsDiv.innerHTML = `<div class="status-msg">Error querying backend. Please check network connections.</div>`;
+      }
+    }
+
+    function renderAlbumCard(album, format) {
+      const attr = album.attributes || {};
+      const card = document.createElement('div');
+      card.className = 'album-card';
+
+      const artworkUrl = formatUrl(attr.artwork?.url, 300, 300);
+
+      let videoSectionHTML = '';
+      if (attr.editorialVideo && Object.keys(attr.editorialVideo).length > 0) {
+        let videoCardsHTML = '';
+        
+        for (const [key, videoData] of Object.entries(attr.editorialVideo)) {
+          if (!videoData.video) continue;
+
+          const previewUrl = formatUrl(videoData.previewFrame?.url, 400, 400);
+          const finalVideoUrl = processVideoLink(videoData.video, format);
+          const isTall = key.toLowerCase().includes('tall');
+
+          videoCardsHTML += `
+            <div class="video-card ${isTall ? 'tall' : ''}">
+              ${previewUrl ? `<img class="video-preview" src="${previewUrl}" alt="${key}">` : ''}
+              <div class="video-details">
+                <span class="video-title">${key}</span>
+                <a href="${finalVideoUrl}" target="_blank" rel="noopener noreferrer" class="btn-open">
+                  Open ${format.toUpperCase()}
+                </a>
+              </div>
+            </div>
+          `;
+        }
+
+        if (videoCardsHTML) {
+          videoSectionHTML = `
+            <div class="videos-section">
+              <h3>Editorial Videos (${format.toUpperCase()})</h3>
+              <div class="video-grid">
+                ${videoCardsHTML}
+              </div>
+            </div>
+          `;
+        }
+      }
+
+      if (!videoSectionHTML) {
+        videoSectionHTML = `
+          <div class="videos-section">
+            <p style="color: var(--text-muted); font-size: 0.85rem;">No editorial videos available for this release.</p>
+          </div>
+        `;
+      }
+
+      card.innerHTML = `
+        <div class="album-header">
+          <img class="album-artwork" src="${artworkUrl}" alt="${attr.name || 'Album Cover'}">
+          <div class="album-info">
+            <h2>${attr.name || 'Unknown Title'}</h2>
+            <p><strong>Artist:</strong> ${attr.artistName || 'Unknown'}</p>
+            <p><strong>Release:</strong> ${attr.releaseDate || 'N/A'}</p>
+            <p><strong>Tracks:</strong> ${attr.trackCount || 0}</p>
+          </div>
+        </div>
+        ${videoSectionHTML}
+      `;
+
+      return card;
+    }
+  </script>
+
+</body>
+</html>
