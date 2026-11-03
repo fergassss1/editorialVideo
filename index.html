@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Apple Music Editorial Stream Extractor</title>
+  <title>editorialThing</title>
   <style>
     :root {
       --bg-color: #0f0f12;
@@ -29,7 +29,6 @@
       min-height: 100vh;
     }
 
-    /* Layout Transitions */
     .app-layout {
       width: 100%;
       max-width: 1400px;
@@ -42,7 +41,6 @@
       transition: all 0.3s ease;
     }
 
-    /* Initial centered desktop layout */
     .app-layout.initial {
       justify-content: center;
       align-items: center;
@@ -53,7 +51,6 @@
       max-width: 520px;
     }
 
-    /* Desktop split-screen when results exist */
     @media (min-width: 900px) {
       .app-layout.has-results {
         display: grid;
@@ -181,7 +178,6 @@
       background: var(--accent-hover);
     }
 
-    /* Results */
     .results-container {
       display: flex;
       flex-direction: column;
@@ -203,22 +199,20 @@
       display: flex;
       gap: 1rem;
       align-items: center;
+      flex-wrap: wrap;
     }
 
     .album-artwork {
-      width: 90px;
-      height: 90px;
+      width: 110px;
+      height: 110px;
       border-radius: 10px;
       object-fit: cover;
       flex-shrink: 0;
       background-color: var(--border-color);
     }
 
-    @media (min-width: 600px) {
-      .album-artwork {
-        width: 110px;
-        height: 110px;
-      }
+    .album-info {
+      flex-grow: 1;
     }
 
     .album-info h2 {
@@ -233,7 +227,16 @@
       margin-bottom: 0.2rem;
     }
 
-    /* Video Section */
+    .max-res-badge {
+      display: inline-block;
+      background: var(--badge-bg);
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      margin-top: 0.3rem;
+    }
+
     .videos-section {
       border-top: 1px solid var(--border-color);
       padding-top: 1rem;
@@ -286,7 +289,6 @@
     .video-title {
       font-size: 0.85rem;
       font-weight: 700;
-      text-transform: capitalize;
     }
 
     .quality-list {
@@ -374,8 +376,8 @@
   <div id="layout" class="app-layout initial">
     <div class="search-panel">
       <header>
-        <h1>Editorial Stream Finder</h1>
-        <p>Extract HLS streams and MP4 variants from Apple Music videos.</p>
+        <h1>editorialThing</h1>
+        <p>An easier way to see editorialVideos from AMP-API. </p>
       </header>
 
       <div class="form-grid">
@@ -414,7 +416,6 @@
       return rawUrl.replace('{w}', width).replace('{h}', height);
     }
 
-    // Convert individual quality stream links inside playlist
     function processStreamUrl(url, targetFormat) {
       if (!url) return '';
       if (targetFormat === 'mp4') {
@@ -423,7 +424,6 @@
       return url;
     }
 
-    // Parse M3U8 content to extract stream details and individual video URLs
     function parseM3U8(content) {
       const streams = [];
       const lines = content.split('\n');
@@ -453,8 +453,6 @@
           }
         }
       }
-
-      // Sort streams highest resolution / bandwidth first
       return streams.reverse();
     }
 
@@ -507,23 +505,48 @@
       const card = document.createElement('div');
       card.className = 'album-card';
 
-      const artworkUrl = formatUrl(attr.artwork?.url, 300, 300);
+      // Artwork dimensions extraction for max resolution
+      const artWidth = attr.artwork?.width || 400;
+      const artHeight = attr.artwork?.height || 400;
+      const rawArtworkUrl = attr.artwork?.url || '';
+      const maxArtworkUrl = formatUrl(rawArtworkUrl, artWidth, artHeight);
+
       let videoSectionHTML = '';
 
       if (attr.editorialVideo && Object.keys(attr.editorialVideo).length > 0) {
         let videoCardsHTML = '';
 
+        // Filter and map keys to avoid duplication (e.g. motionDetailSquare vs motionSquareVideo1x1)
+        const processedTypes = new Set();
+        
         for (const [key, videoData] of Object.entries(attr.editorialVideo)) {
           if (!videoData.video) continue;
 
+          // Determine clean canonical type
+          let commercialName = '';
+          let isTall = false;
+
+          const lowerKey = key.toLowerCase();
+          if (lowerKey.includes('square') || lowerKey.includes('detaildog') || lowerKey.includes('detailmin')) {
+            if (processedTypes.has('square')) continue;
+            processedTypes.add('square');
+            commercialName = 'Square Animated Artwork';
+            isTall = false;
+          } else if (lowerKey.includes('tall')) {
+            if (processedTypes.has('tall')) continue;
+            processedTypes.add('tall');
+            commercialName = 'Tall Animated Artwork';
+            isTall = true;
+          } else {
+            commercialName = key; // fallback
+          }
+
           const previewUrl = formatUrl(videoData.previewFrame?.url, 400, 400);
           const masterUrl = videoData.video;
-          const isTall = key.toLowerCase().includes('tall');
 
           let streamsListHTML = '<div class="quality-meta">Fetching qualities...</div>';
 
           try {
-            // Fetch playlist content to extract internal qualities
             const playlistRes = await fetch(masterUrl);
             if (playlistRes.ok) {
               const playlistText = await playlistRes.text();
@@ -554,10 +577,10 @@
           videoCardsHTML += `
             <div class="video-card ${isTall ? 'tall' : ''}">
               <div class="video-preview-wrap">
-                ${previewUrl ? `<img class="video-preview" src="${previewUrl}" alt="${key}">` : ''}
+                ${previewUrl ? `<img class="video-preview" src="${previewUrl}" alt="${commercialName}">` : ''}
               </div>
               <div class="video-details">
-                <span class="video-title">${key}</span>
+                <span class="video-title">${commercialName}</span>
                 <div class="quality-list">
                   ${streamsListHTML}
                 </div>
@@ -591,12 +614,17 @@
 
       card.innerHTML = `
         <div class="album-header">
-          <img class="album-artwork" src="${artworkUrl}" alt="${attr.name || 'Album Cover'}">
+          <a href="${maxArtworkUrl}" target="_blank" rel="noopener noreferrer" title="View Maximum Resolution Artwork">
+            <img class="album-artwork" src="${maxArtworkUrl}" alt="${attr.name || 'Album Cover'}">
+          </a>
           <div class="album-info">
             <h2>${attr.name || 'Unknown Title'}</h2>
             <p><strong>Artist:</strong> ${attr.artistName || 'Unknown'}</p>
             <p><strong>Release:</strong> ${attr.releaseDate || 'N/A'}</p>
             <p><strong>Tracks:</strong> ${attr.trackCount || 0}</p>
+            <a href="${maxArtworkUrl}" target="_blank" rel="noopener noreferrer" class="max-res-badge">
+              Max Resolution Artwork (${artWidth}x${artHeight})
+            </a>
           </div>
         </div>
         ${videoSectionHTML}
