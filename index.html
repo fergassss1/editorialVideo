@@ -446,7 +446,7 @@
   <script>
     let lastError = null;
 
-    function formatUrl(rawUrl, width = 400, height = 400) {
+    function formatUrl(rawUrl, width = 670, height = 670) {
       if (!rawUrl) return '';
       return rawUrl.replace('{w}', width).replace('{h}', height);
     }
@@ -560,6 +560,8 @@
       const artWidth = attr.artwork?.width || 400;
       const artHeight = attr.artwork?.height || 400;
       const rawArtworkUrl = attr.artwork?.url || '';
+      // First small static artwork shown uses 670 width/height
+      const smallArtworkUrl = formatUrl(rawArtworkUrl, 670, 670);
       const maxArtworkUrl = formatUrl(rawArtworkUrl, artWidth, artHeight);
 
       let videoSectionHTML = '';
@@ -603,7 +605,9 @@
               const parsedStreams = parseM3U8(playlistText);
 
               if (parsedStreams.length > 0) {
-                playableStreamUrl = parsedStreams[Math.floor(parsedStreams.length / 2)].url;
+                // Find ~1080p stream for preview if available, else fallback to middle/closest
+                const target1080 = parsedStreams.find(st => st.resolution.includes('1080')) || parsedStreams[Math.floor(parsedStreams.length / 2)];
+                playableStreamUrl = target1080.url;
 
                 streamsListHTML = parsedStreams.map(st => {
                   const finalUrl = processStreamUrl(st.url, format);
@@ -680,7 +684,7 @@
       card.innerHTML = `
         <div class="album-header">
           <a href="${maxArtworkUrl}" target="_blank" rel="noopener noreferrer" title="View max res artwork">
-            <img class="album-artwork" src="${maxArtworkUrl}" alt="${attr.name || 'Album cover'}">
+            <img class="album-artwork" src="${smallArtworkUrl}" alt="${attr.name || 'Album cover'}">
           </a>
           <div class="album-info">
             <h2>${attr.name || 'Unknown Title'}</h2>
