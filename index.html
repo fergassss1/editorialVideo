@@ -7,6 +7,13 @@
   <!-- HLS.js for cross-browser .m3u8 playback -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <style>
+    @font-face {
+      font-family: 'SF Pro';
+      src: url('https://github.com/chris-short/apple-san-francisco-pro-fonts/raw/refs/heads/main/SF-Pro.ttf') format('truetype');
+      font-weight: 100 900;
+      font-style: normal;
+    }
+
     :root {
       --bg-color: #1F1F1F;
       --card-bg: #2F2F30;
@@ -22,7 +29,7 @@
       box-sizing: border-box;
       margin: 0;
       padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-family: 'SF Pro', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
 
     body {
@@ -76,14 +83,16 @@
     }
 
     header h1 {
-      font-size: 1.75rem;
       font-weight: 700;
+      font-size: 1.75rem;
       margin-bottom: 0.4rem;
+      letter-spacing: -0.5px;
     }
 
     header p {
       color: var(--text-muted);
       font-size: 0.85rem;
+      font-weight: 400;
     }
 
     .search-panel {
@@ -122,6 +131,7 @@
       padding: 0.75rem 1rem;
       border-radius: 8px;
       font-size: 0.95rem;
+      font-weight: 400;
       outline: none;
       transition: border-color 0.2s;
     }
@@ -219,8 +229,20 @@
 
     .album-info h2 {
       font-size: 1.2rem;
+      font-weight: 700;
       margin-bottom: 0.25rem;
       word-break: break-word;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .explicit-badge {
+      font-size: 0.85rem;
+      background: rgba(255, 255, 255, 0.15);
+      padding: 0.05rem 0.3rem;
+      border-radius: 4px;
+      vertical-align: middle;
     }
 
     .album-info p {
@@ -247,6 +269,7 @@
 
     .videos-section h3 {
       font-size: 0.95rem;
+      font-weight: 600;
       margin-bottom: 0.75rem;
     }
 
@@ -560,9 +583,11 @@
       const artWidth = attr.artwork?.width || 400;
       const artHeight = attr.artwork?.height || 400;
       const rawArtworkUrl = attr.artwork?.url || '';
-      // First small static artwork shown uses 670 width/height
       const smallArtworkUrl = formatUrl(rawArtworkUrl, 670, 670);
       const maxArtworkUrl = formatUrl(rawArtworkUrl, artWidth, artHeight);
+
+      const isExplicit = attr.contentRating === 'explicit';
+      const explicitBadgeHTML = isExplicit ? `<span class="explicit-badge" title="Explicit">🅴</span>` : '';
 
       let videoSectionHTML = '';
 
@@ -605,7 +630,6 @@
               const parsedStreams = parseM3U8(playlistText);
 
               if (parsedStreams.length > 0) {
-                // Find ~1080p stream for preview if available, else fallback to middle/closest
                 const target1080 = parsedStreams.find(st => st.resolution.includes('1080')) || parsedStreams[Math.floor(parsedStreams.length / 2)];
                 playableStreamUrl = target1080.url;
 
@@ -687,7 +711,7 @@
             <img class="album-artwork" src="${smallArtworkUrl}" alt="${attr.name || 'Album cover'}">
           </a>
           <div class="album-info">
-            <h2>${attr.name || 'Unknown Title'}</h2>
+            <h2>${attr.name || 'Unknown Title'} ${explicitBadgeHTML}</h2>
             <p><strong>Artist:</strong> ${attr.artistName || 'Unknown'}</p>
             <p><strong>Release:</strong> ${attr.releaseDate || 'N/A'}</p>
             <p><strong>Tracks:</strong> ${attr.trackCount || 0}</p>
