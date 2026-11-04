@@ -372,6 +372,36 @@
       border: 1px solid var(--border-color);
       border-radius: 12px;
     }
+
+    .error-box {
+      margin-top: 1rem;
+      background: #3a1c1c;
+      border: 1px solid #ff5c5c;
+      padding: 1rem;
+      border-radius: 8px;
+      text-align: left;
+      font-family: monospace;
+      font-size: 0.8rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: #ffcccc;
+      display: none;
+    }
+
+    .btn-view-error {
+      background: transparent;
+      border: 1px solid #ff5c5c;
+      color: #ff5c5c;
+      padding: 0.4rem 0.8rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      margin-top: 0.75rem;
+      font-weight: 600;
+    }
+    .btn-view-error:hover {
+      background: rgba(255, 92, 92, 0.1);
+    }
   </style>
 </head>
 <body>
@@ -414,6 +444,8 @@
   </div>
 
   <script>
+    let lastError = null;
+
     function formatUrl(rawUrl, width = 400, height = 400) {
       if (!rawUrl) return '';
       return rawUrl.replace('{w}', width).replace('{h}', height);
@@ -459,10 +491,17 @@
       return streams.reverse();
     }
 
+    function toggleErrorBox() {
+      const box = document.getElementById('errorDetailsBox');
+      if (box) {
+        box.style.display = box.style.display === 'none' ? 'block' : 'none';
+      }
+    }
+
     async function performSearch() {
       const album = document.getElementById('albumInput').value.trim();
       const artist = document.getElementById('artistInput').value.trim();
-      const storefront = document.getElementById('storefrontInput').value.trim() || 'jp';
+      const storefront = document.getElementById('storefrontInput').value.trim() || 'us';
       const selectedFormat = document.querySelector('input[name="format"]:checked').value;
       const resultsDiv = document.getElementById('results');
       const layoutDiv = document.getElementById('layout');
@@ -475,13 +514,16 @@
       layoutDiv.classList.remove('initial');
       layoutDiv.classList.add('has-results');
       resultsDiv.innerHTML = '<div class="status-msg">Searching catalog...</div>';
+      lastError = null;
 
       const searchTerm = encodeURIComponent(`${album} ${artist}`.trim());
       const requestUrl = `https://amphoreus.ejpoacc.workers.dev/v1/catalog/${encodeURIComponent(storefront)}/search?term=${searchTerm}&types=albums&extend=editorialVideo`;
 
       try {
         const response = await fetch(requestUrl);
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status} ${response.statusText}`);
+        }
         
         const data = await response.json();
         const albums = data?.results?.albums?.data || [];
@@ -499,7 +541,14 @@
 
       } catch (err) {
         console.error('Search failed:', err);
-        resultsDiv.innerHTML = `<div class="status-msg">Error querying backend. Please check network connection.</div>`;
+        lastError = err;
+        resultsDiv.innerHTML = `
+          <div class="status-msg">
+            Error querying backend or parsing response.<br>
+            <button class="btn-view-error" onclick="toggleErrorBox()">View Error Details</button>
+            <div id="errorDetailsBox" class="error-box">${err.stack || err.message || err}</div>
+          </div>
+        `;
       }
     }
 
@@ -554,7 +603,6 @@
               const parsedStreams = parseM3U8(playlistText);
 
               if (parsedStreams.length > 0) {
-                // Grab an optimal/middle stream for smooth looping preview
                 playableStreamUrl = parsedStreams[Math.floor(parsedStreams.length / 2)].url;
 
                 streamsListHTML = parsedStreams.map(st => {
@@ -595,7 +643,6 @@
             </div>
           `;
 
-          // Initialize HLS playback for the animated preview after rendering
           setTimeout(() => {
             const videoElement = document.getElementById(videoElemId);
             if (videoElement && playableStreamUrl) {
@@ -604,7 +651,6 @@
                 hls.loadSource(playableStreamUrl);
                 hls.attachMedia(videoElement);
               } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
-                // Native Safari support
                 videoElement.src = playableStreamUrl;
               }
             }
@@ -633,7 +679,7 @@
 
       card.innerHTML = `
         <div class="album-header">
-          <a href="${maxArtworkUrl}" target="_blank" rel="noopener noreferrer" View max res artwork">
+          <a href="${maxArtworkUrl}" target="_blank" rel="noopener noreferrer" title="View max res artwork">
             <img class="album-artwork" src="${maxArtworkUrl}" alt="${attr.name || 'Album cover'}">
           </a>
           <div class="album-info">
