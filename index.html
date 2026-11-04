@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>editorialThing</title>
+  <!-- HLS.js for cross-browser .m3u8 playback -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <style>
     :root {
       --bg-color: #1F1F1F;
@@ -235,6 +237,7 @@
       padding: 0.2rem 0.5rem;
       border-radius: 4px;
       margin-top: 0.3rem;
+      text-decoration: none;
     }
 
     .videos-section {
@@ -377,7 +380,7 @@
     <div class="search-panel">
       <header>
         <h1>editorialThing</h1>
-        <p>An easier way to see editorialVideos from AMP-API. </p>
+        <p>An easier way to see editorialVideos from AMP-API.</p>
       </header>
 
       <div class="form-grid">
@@ -505,7 +508,6 @@
       const card = document.createElement('div');
       card.className = 'album-card';
 
-      // Artwork dimensions extraction for max resolution
       const artWidth = attr.artwork?.width || 400;
       const artHeight = attr.artwork?.height || 400;
       const rawArtworkUrl = attr.artwork?.url || '';
@@ -515,14 +517,11 @@
 
       if (attr.editorialVideo && Object.keys(attr.editorialVideo).length > 0) {
         let videoCardsHTML = '';
-
-        // Filter and map keys to avoid duplication (e.g. motionDetailSquare vs motionSquareVideo1x1)
         const processedTypes = new Set();
         
         for (const [key, videoData] of Object.entries(attr.editorialVideo)) {
           if (!videoData.video) continue;
 
-          // Determine clean canonical type
           let commercialName = '';
           let isTall = false;
 
@@ -538,13 +537,15 @@
             commercialName = 'Tall Animated Artwork';
             isTall = true;
           } else {
-            commercialName = key; // fallback
+            commercialName = key;
           }
 
           const previewUrl = formatUrl(videoData.previewFrame?.url, 400, 400);
           const masterUrl = videoData.video;
+          const videoElemId = 'hls-vid-' + Math.random().toString(36).substr(2, 9);
 
           let streamsListHTML = '<div class="quality-meta">Fetching qualities...</div>';
+          let playableStreamUrl = '';
 
           try {
             const playlistRes = await fetch(masterUrl);
@@ -553,6 +554,9 @@
               const parsedStreams = parseM3U8(playlistText);
 
               if (parsedStreams.length > 0) {
+                // Grab an optimal/middle stream for smooth looping preview
+                playableStreamUrl = parsedStreams[Math.floor(parsedStreams.length / 2)].url;
+
                 streamsListHTML = parsedStreams.map(st => {
                   const finalUrl = processStreamUrl(st.url, format);
                   return `
@@ -577,7 +581,7 @@
           videoCardsHTML += `
             <div class="video-card ${isTall ? 'tall' : ''}">
               <div class="video-preview-wrap">
-                ${previewUrl ? `<img class="video-preview" src="${previewUrl}" alt="${commercialName}">` : ''}
+                <video id="${videoElemId}" class="video-preview" autoplay loop muted playsinline poster="${previewUrl}"></video>
               </div>
               <div class="video-details">
                 <span class="video-title">${commercialName}</span>
@@ -585,17 +589,32 @@
                   ${streamsListHTML}
                 </div>
                 <a href="${masterUrl}" target="_blank" rel="noopener noreferrer" class="btn-master">
-                  Open Default default.m3u8
+                  Open the master .m3u8
                 </a>
               </div>
             </div>
           `;
+
+          // Initialize HLS playback for the animated preview after rendering
+          setTimeout(() => {
+            const videoElement = document.getElementById(videoElemId);
+            if (videoElement && playableStreamUrl) {
+              if (Hls.isSupported()) {
+                const hls = new Hls({ maxBufferLength: 5, maxMaxBufferLength: 10 });
+                hls.loadSource(playableStreamUrl);
+                hls.attachMedia(videoElement);
+              } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+                // Native Safari support
+                videoElement.src = playableStreamUrl;
+              }
+            }
+          }, 100);
         }
 
         if (videoCardsHTML) {
           videoSectionHTML = `
             <div class="videos-section">
-              <h3>Editorial Videos & Stream Qualities</h3>
+              <h3>Animated artwork variants</h3>
               <div class="video-grid">
                 ${videoCardsHTML}
               </div>
@@ -607,15 +626,15 @@
       if (!videoSectionHTML) {
         videoSectionHTML = `
           <div class="videos-section">
-            <p style="color: var(--text-muted); font-size: 0.85rem;">No editorial videos available for this release.</p>
+            <p style="color: var(--text-muted); font-size: 0.85rem;">No Animated Artwork available for this release.</p>
           </div>
         `;
       }
 
       card.innerHTML = `
         <div class="album-header">
-          <a href="${maxArtworkUrl}" target="_blank" rel="noopener noreferrer" title="View Maximum Resolution Artwork">
-            <img class="album-artwork" src="${maxArtworkUrl}" alt="${attr.name || 'Album Cover'}">
+          <a href="${maxArtworkUrl}" target="_blank" rel="noopener noreferrer" View max res artwork">
+            <img class="album-artwork" src="${maxArtworkUrl}" alt="${attr.name || 'Album cover'}">
           </a>
           <div class="album-info">
             <h2>${attr.name || 'Unknown Title'}</h2>
@@ -623,7 +642,7 @@
             <p><strong>Release:</strong> ${attr.releaseDate || 'N/A'}</p>
             <p><strong>Tracks:</strong> ${attr.trackCount || 0}</p>
             <a href="${maxArtworkUrl}" target="_blank" rel="noopener noreferrer" class="max-res-badge">
-              Max Resolution Artwork (${artWidth}x${artHeight})
+              Maximum resolution artwork (${artWidth}x${artHeight})
             </a>
           </div>
         </div>
