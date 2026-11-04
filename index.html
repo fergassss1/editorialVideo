@@ -455,8 +455,8 @@
         <div class="format-selector">
           <label>Preferred format:</label>
           <div class="radio-group">
-            <label><input type="radio" name="format" value="m3u8" checked> .m3u8</label>
-            <label><input type="radio" name="format" value="mp4"> .mp4</label>
+            <label><input type="radio" name="format" value="m3u8" checked onchange="updateFormatsDynamic()"> .m3u8</label>
+            <label><input type="radio" name="format" value="mp4" onchange="updateFormatsDynamic()"> .mp4</label>
           </div>
         </div>
         <button class="btn-search" onclick="performSearch()">Search</button>
@@ -468,6 +468,8 @@
 
   <script>
     let lastError = null;
+    // Store raw streams globally per video card so we can dynamically re-render links on format change
+    let globalParsedStreamsMap = {};
 
     function formatUrl(rawUrl, width = 670, height = 670) {
       if (!rawUrl) return '';
@@ -480,6 +482,32 @@
         return url.replace(/\.m3u8$/, '-.mp4');
       }
       return url;
+    }
+
+    // Dynamic update when radio buttons change without re-searching
+    function updateFormatsDynamic() {
+      const selectedFormat = document.querySelector('input[name="format"]:checked').value;
+      
+      // Update all generated quality list items across rendered cards instantly
+      for (const [cardId, streams] of Object.entries(globalParsedStreamsMap)) {
+        const listContainer = document.getElementById(`quality-list-${cardId}`);
+        if (listContainer) {
+          listContainer.innerHTML = streams.map(st => {
+            const finalUrl = processStreamUrl(st.url, selectedFormat);
+            return `
+              <div class="quality-item">
+                <div class="quality-info">
+                  <span class="quality-res">${st.resolution}</span>
+                  <span class="quality-meta">${st.codec} • ${st.bandwidth}</span>
+                </div>
+                <a href="${finalUrl}" target="_blank" rel="noopener noreferrer" class="btn-open">
+                  Open ${selectedFormat.toUpperCase()}
+                </a>
+              </div>
+            `;
+          }).join('');
+        }
+      }
     }
 
     function parseM3U8(content) {
@@ -525,7 +553,6 @@
       const album = document.getElementById('albumInput').value.trim();
       const artist = document.getElementById('artistInput').value.trim();
       const storefront = document.getElementById('storefrontInput').value.trim() || 'us';
-      const selectedFormat = document.querySelector('input[name="format"]:checked').value;
       const resultsDiv = document.getElementById('results');
       const layoutDiv = document.getElementById('layout');
 
@@ -538,6 +565,7 @@
       layoutDiv.classList.add('has-results');
       resultsDiv.innerHTML = '<div class="status-msg">Searching catalog...</div>';
       lastError = null;
+      globalParsedStreamsMap = {}; // Reset cache
 
       const searchTerm = encodeURIComponent(`${album} ${artist}`.trim());
       const requestUrl = `https://amphoreus.ejpoacc.workers.dev/v1/catalog/${encodeURIComponent(storefront)}/search?term=${searchTerm}&types=albums&extend=editorialVideo`;
@@ -558,7 +586,7 @@
 
         resultsDiv.innerHTML = '';
         for (const albumItem of albums) {
-          const card = await renderAlbumCard(albumItem, selectedFormat);
+          const card = await renderAlbumCard(albumItem);
           resultsDiv.appendChild(card);
         }
 
@@ -575,7 +603,7 @@
       }
     }
 
-    async function renderAlbumCard(album, format) {
+    async function renderAlbumCard(album) {
       const attr = album.attributes || {};
       const card = document.createElement('div');
       card.className = 'album-card';
@@ -618,10 +646,13 @@
 
           const previewUrl = formatUrl(videoData.previewFrame?.url, 400, 400);
           const masterUrl = videoData.video;
-          const videoElemId = 'hls-vid-' + Math.random().toString(36).substr(2, 9);
+          const uniqueId = Math.random().toString(36).substr(2, 9);
+          const videoElemId = 'hls-vid-' + uniqueId;
+          const listElemId = 'quality-list-' + uniqueId;
 
           let streamsListHTML = '<div class="quality-meta">Fetching qualities...</div>';
           let playableStreamUrl = '';
+          const currentFormat = document.querySelector('input[name="format"]:checked').value;
 
           try {
             const playlistRes = await fetch(masterUrl);
@@ -630,11 +661,14 @@
               const parsedStreams = parseM3U8(playlistText);
 
               if (parsedStreams.length > 0) {
+                // Save globally so radio toggle can rebuild links instantly
+                globalParsedStreamsMap[uniqueId] = parsedStreams;
+
                 const target1080 = parsedStreams.find(st => st.resolution.includes('1080')) || parsedStreams[Math.floor(parsedStreams.length / 2)];
                 playableStreamUrl = target1080.url;
 
                 streamsListHTML = parsedStreams.map(st => {
-                  const finalUrl = processStreamUrl(st.url, format);
+                  const finalUrl = processStreamUrl(st.url, currentFormat);
                   return `
                     <div class="quality-item">
                       <div class="quality-info">
@@ -642,7 +676,7 @@
                         <span class="quality-meta">${st.codec} • ${st.bandwidth}</span>
                       </div>
                       <a href="${finalUrl}" target="_blank" rel="noopener noreferrer" class="btn-open">
-                        Open ${format.toUpperCase()}
+                        Open ${currentFormat.toUpperCase()}
                       </a>
                     </div>
                   `;
@@ -661,7 +695,7 @@
               </div>
               <div class="video-details">
                 <span class="video-title">${commercialName}</span>
-                <div class="quality-list">
+                <div id="${listElemId}" class="quality-list">
                   ${streamsListHTML}
                 </div>
                 <a href="${masterUrl}" target="_blank" rel="noopener noreferrer" class="btn-master">
