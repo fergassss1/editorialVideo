@@ -493,18 +493,18 @@
       if (squareData) {
         lines.push('### Square');
         const parts = [];
-        if (squareData.res1080) parts.push(`[1080x1080](${squareData.res1080})`);
-        if (squareData.res2160) parts.push(`[2160x2160](${squareData.res2160})`);
-        if (squareData.masterUrl) parts.push(`[Master M3U8](${squareData.masterUrl})`);
+        if (squareData.res1080) parts.push(`[1080x1080](<${squareData.res1080}>)`);
+        if (squareData.res2160) parts.push(`[2160x2160](<${squareData.res2160}>)`);
+        if (squareData.masterUrl) parts.push(`[Master M3U8](<${squareData.masterUrl}>)`);
         if (parts.length > 0) lines.push(parts.join(' • '));
       }
 
       if (tallData) {
         lines.push('### Tall');
         const parts = [];
-        if (tallData.res1080) parts.push(`[1080x1440](${tallData.res1080})`);
-        if (tallData.res2048) parts.push(`[2048x2732](${tallData.res2048})`);
-        if (tallData.masterUrl) parts.push(`[Master M3U8](${tallData.masterUrl})`);
+        if (tallData.res1080) parts.push(`[1080x1440](<${tallData.res1080}>)`);
+        if (tallData.res2048) parts.push(`[2048x2732](<${tallData.res2048}>)`);
+        if (tallData.masterUrl) parts.push(`[Master M3U8](<${tallData.masterUrl}>)`);
         if (parts.length > 0) lines.push(parts.join(' • '));
       }
 
