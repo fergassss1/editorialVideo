@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>editorialThing — Markdown Copy</title>
+  <!-- HLS.js for cross-browser .m3u8 playback -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    @font-face {
+      font-family: 'SF Pro';
+      src: url('https://github.com/chris-short/apple-san-francisco-pro-fonts/raw/refs/heads/main/SF-Pro.ttf') format('truetype');
+      font-weight: 100 900;
+      font-style: normal;
+    }
+
+    :root {
+      --bg-color: #1F1F1F;
+      --card-bg: #2F2F30;
+      --accent: #5AC8F5;
+      --accent-hover: #47b8e6;
+      --text-main: #EFEFEF;
+      --text-muted: #8e8e93;
+      --border-color: #313134;
+      --badge-bg: #2F2F30;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'SF Pro', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      min-height: 100vh;
+    }
+
+    .app-layout {
+      width: 100%;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+      min-height: 100vh;
+      transition: all 0.3s ease;
+    }
+
+    .app-layout.initial {
+      justify-content: center;
+      align-items: center;
+    }
+
+    .app-layout.initial .search-panel {
+      width: 100%;
+      max-width: 520px;
+    }
+
+    @media (min-width: 900px) {
+      .app-layout.has-results {
+        display: grid;
+        grid-template-columns: 350px 1fr;
+        align-items: start;
+      }
+
+      .app-layout.has-results .search-panel {
+        position: sticky;
+        top: 1.5rem;
+      }
+    }
+
+    header {
+      margin-bottom: 1.25rem;
+      text-align: left;
+    }
+
+    .app-layout.initial header {
+      text-align: center;
+    }
+
+    header h1 {
+      font-weight: 700;
+      font-size: 1.75rem;
+      margin-bottom: 0.4rem;
+      letter-spacing: -0.5px;
+    }
+
+    header p {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      font-weight: 400;
+    }
+
+    .search-panel {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 1.5rem;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    .form-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .form-group label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .form-group input {
+      background: #0f0e14;
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 400;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .form-group input:focus {
+      border-color: var(--accent);
+    }
+
+    .options-row {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      border-top: 1px solid var(--border-color);
+      padding-top: 1.25rem;
+    }
+
+    button.btn-search {
+      background: var(--accent);
+      color: #0f0e14;
+      border: none;
+      padding: 0.85rem;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      width: 100%;
+      transition: background 0.2s;
+    }
+
+    button.btn-search:hover {
+      background: var(--accent-hover);
+    }
+
+    .results-container {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      width: 100%;
+    }
+
+    .album-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .album-header {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .album-artwork {
+      width: 110px;
+      height: 110px;
+      border-radius: 10px;
+      object-fit: cover;
+      flex-shrink: 0;
+      background-color: var(--border-color);
+    }
+
+    .album-info {
+      flex-grow: 1;
+    }
+
+    .album-info h2 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+      word-break: break-word;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .explicit-badge {
+      font-size: 0.85rem;
+      background: rgba(255, 255, 255, 0.15);
+      padding: 0.05rem 0.3rem;
+      border-radius: 4px;
+      vertical-align: middle;
+    }
+
+    .album-info p {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-bottom: 0.2rem;
+    }
+
+    .max-res-badge {
+      display: inline-block;
+      background: #121118;
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      padding: 0.25rem 0.6rem;
+      border-radius: 6px;
+      margin-top: 0.35rem;
+      text-decoration: none;
+      transition: color 0.2s, border-color 0.2s;
+    }
+
+    .max-res-badge:hover {
+      color: var(--text-main);
+      border-color: var(--text-muted);
+    }
+
+    .videos-section {
+      border-top: 1px solid var(--border-color);
+      padding-top: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .videos-section h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+
+    .preview-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 240px));
+      gap: 1rem;
+    }
+
+    .video-card {
+      background: #121118;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .video-preview-wrap {
+      position: relative;
+      width: 100%;
+      background-color: #000;
+    }
+
+    .video-preview {
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      display: block;
+    }
+
+    .video-card.tall .video-preview {
+      aspect-ratio: 3/4;
+    }
+
+    .video-label {
+      padding: 0.6rem 0.85rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border-color);
+    }
+
+    /* Markdown output & copy box */
+    .markdown-box {
+      background: #121118;
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .markdown-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .markdown-header span {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+    }
+
+    .btn-copy {
+      background: rgba(255, 255, 255, 0.12);
+      color: var(--text-main);
+      border: 1px solid transparent;
+      padding: 0.4rem 0.85rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-copy:hover {
+      background: var(--accent);
+      color: #0f0e14;
+    }
+
+    .btn-copy.copied {
+      background: #30d158;
+      color: #0f0e14;
+    }
+
+    .markdown-textarea {
+      width: 100%;
+      min-height: 155px;
+      background: #0b0a0f;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 0.85rem;
+      color: #e5e5ea;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.8rem;
+      line-height: 1.5;
+      resize: vertical;
+      outline: none;
+    }
+
+    .markdown-textarea:focus {
+      border-color: var(--accent);
+    }
+
+    .status-msg {
+      text-align: center;
+      color: var(--text-muted);
+      padding: 2rem;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+    }
+
+    .error-box {
+      margin-top: 1rem;
+      background: #3a1c1c;
+      border: 1px solid #ff5c5c;
+      padding: 1rem;
+      border-radius: 8px;
+      text-align: left;
+      font-family: monospace;
+      font-size: 0.8rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: #ffcccc;
+      display: none;
+    }
+
+    .btn-view-error {
+      background: transparent;
+      border: 1px solid #ff5c5c;
+      color: #ff5c5c;
+      padding: 0.4rem 0.8rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      margin-top: 0.75rem;
+      font-weight: 600;
+    }
+    .btn-view-error:hover {
+      background: rgba(255, 92, 92, 0.1);
+    }
+  </style>
+</head>
+<body>
+
+  <div id="layout" class="app-layout initial">
+    <div class="search-panel">
+      <header>
+        <h1>editorialThing</h1>
+        <p>Copy formatted Animated Artwork Markdown from AMP-API.</p>
+      </header>
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="albumInput">Album / Release</label>
+          <input type="text" id="albumInput" placeholder="WILD - EP" onkeydown="if(event.key==='Enter') performSearch()">
+        </div>
+        <div class="form-group">
+          <label for="artistInput">Artist</label>
+          <input type="text" id="artistInput" placeholder="KATSEYE" onkeydown="if(event.key==='Enter') performSearch()">
+        </div>
+        <div class="form-group">
+          <label for="storefrontInput">Storefront</label>
+          <input type="text" id="storefrontInput" placeholder="us" onkeydown="if(event.key==='Enter') performSearch()">
+        </div>
+      </div>
+
+      <div class="options-row">
+        <button class="btn-search" onclick="performSearch()">Search</button>
+      </div>
+    </div>
+
+    <div id="results" class="results-container"></div>
+  </div>
+
+  <script>
+    let lastError = null;
+
+    function formatUrl(rawUrl, width = 670, height = 670) {
+      if (!rawUrl) return '';
+      return rawUrl.replace('{w}', width).replace('{h}', height);
+    }
+
+    function toMp4Url(url) {
+      if (!url) return '';
+      return url.replace(/\.m3u8$/, '-.mp4');
+    }
+
+    function parseM3U8(content) {
+      const streams = [];
+      const lines = content.split('\n');
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        
+        if (line.startsWith('#EXT-X-STREAM-INF:')) {
+          const attributes = line.substring(18);
+          
+          const resMatch = attributes.match(/RESOLUTION=([0-9x]+)/);
+          const bwMatch = attributes.match(/BANDWIDTH=([0-9]+)/);
+          
+          let nextUrl = '';
+          if (i + 1 < lines.length && !lines[i + 1].startsWith('#')) {
+            nextUrl = lines[i + 1].trim();
+          }
+
+          if (nextUrl) {
+            streams.push({
+              resolution: resMatch ? resMatch[1] : '',
+              bandwidthNum: bwMatch ? parseInt(bwMatch[1], 10) : 0,
+              url: nextUrl
+            });
+          }
+        }
+      }
+      return streams;
+    }
+
+    // Finds the stream matching the exact resolution with the highest bandwidth
+    function getBestStreamForResolution(streams, targetRes) {
+      const matching = streams.filter(s => s.resolution === targetRes);
+      if (matching.length === 0) return null;
+      matching.sort((a, b) => b.bandwidthNum - a.bandwidthNum);
+      return toMp4Url(matching[0].url);
+    }
+
+    function buildFormattedMarkdown(squareData, tallData) {
+      const lines = ['Animated Artwork'];
+
+      if (squareData) {
+        lines.push('### Square');
+        const parts = [];
+        if (squareData.res1080) parts.push(`[1080x1080](${squareData.res1080})`);
+        if (squareData.res2160) parts.push(`[2160x2160](${squareData.res2160})`);
+        if (squareData.masterUrl) parts.push(`[Master M3U8](${squareData.masterUrl})`);
+        if (parts.length > 0) lines.push(parts.join(' • '));
+      }
+
+      if (tallData) {
+        lines.push('### Tall');
+        const parts = [];
+        if (tallData.res1080) parts.push(`[1080x1440](${tallData.res1080})`);
+        if (tallData.res2048) parts.push(`[2048x2732](${tallData.res2048})`);
+        if (tallData.masterUrl) parts.push(`[Master M3U8](${tallData.masterUrl})`);
+        if (parts.length > 0) lines.push(parts.join(' • '));
+      }
+
+      lines.push('-# Master M3U8 compatible with Firefox.');
+      return lines.join('\n');
+    }
+
+    async function copyMarkdownText(textareaId, btnElement) {
+      const textarea = document.getElementById(textareaId);
+      if (!textarea) return;
+
+      try {
+        await navigator.clipboard.writeText(textarea.value);
+      } catch (err) {
+        textarea.select();
+        document.execCommand('copy');
+      }
+
+      const originalText = btnElement.textContent;
+      btnElement.textContent = 'Copied!';
+      btnElement.classList.add('copied');
+      setTimeout(() => {
+        btnElement.textContent = originalText;
+        btnElement.classList.remove('copied');
+      }, 1800);
+    }
+
+    function toggleErrorBox() {
+      const box = document.getElementById('errorDetailsBox');
+      if (box) {
+        box.style.display = box.style.display === 'none' ? 'block' : 'none';
+      }
+    }
+
+    async function performSearch() {
+      const album = document.getElementById('albumInput').value.trim();
+      const artist = document.getElementById('artistInput').value.trim();
+      const storefront = document.getElementById('storefrontInput').value.trim() || 'us';
+      const resultsDiv = document.getElementById('results');
+      const layoutDiv = document.getElementById('layout');
+
+      if (!album && !artist) {
+        resultsDiv.innerHTML = '<div class="status-msg">Please enter an album or artist name.</div>';
+        return;
+      }
+
+      layoutDiv.classList.remove('initial');
+      layoutDiv.classList.add('has-results');
+      resultsDiv.innerHTML = '<div class="status-msg">Searching catalog...</div>';
+      lastError = null;
+
+      const searchTerm = encodeURIComponent(`${album} ${artist}`.trim());
+      const requestUrl = `https://amphoreus.ejpoacc.workers.dev/v1/catalog/${encodeURIComponent(storefront)}/search?term=${searchTerm}&types=albums&extend=editorialVideo`;
+
+      try {
+        const response = await fetch(requestUrl);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status} ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        const albums = data?.results?.albums?.data || [];
+
+        if (albums.length === 0) {
+          resultsDiv.innerHTML = '<div class="status-msg">No albums found for this query.</div>';
+          return;
+        }
+
+        resultsDiv.innerHTML = '';
+        for (const albumItem of albums) {
+          const card = await renderAlbumCard(albumItem);
+          resultsDiv.appendChild(card);
+        }
+
+      } catch (err) {
+        console.error('Search failed:', err);
+        lastError = err;
+        resultsDiv.innerHTML = `
+          <div class="status-msg">
+            Error querying backend or parsing response.<br>
+            <button class="btn-view-error" onclick="toggleErrorBox()">View Error Details</button>
+            <div id="errorDetailsBox" class="error-box">${err.stack || err.message || err}</div>
+          </div>
+        `;
+      }
+    }
+
+    async function renderAlbumCard(album) {
+      const attr = album.attributes || {};
+      const card = document.createElement('div');
+      card.className = 'album-card';
+
+      const artWidth = attr.artwork?.width || 400;
+      const artHeight = attr.artwork?.height || 400;
+      const rawArtworkUrl = attr.artwork?.url || '';
+      const smallArtworkUrl = formatUrl(rawArtworkUrl, 670, 670);
+      const maxArtworkUrl = formatUrl(rawArtworkUrl, artWidth, artHeight);
+
+      const isExplicit = attr.contentRating === 'explicit';
+      const explicitBadgeHTML = isExplicit ? `<span class="explicit-badge" title="Explicit">🅴</span>` : '';
+
+      let videoSectionHTML = '';
+
+      if (attr.editorialVideo && Object.keys(attr.editorialVideo).length > 0) {
+        let previewCardsHTML = '';
+        const processedTypes = new Set();
+        let squareData = null;
+        let tallData = null;
+        
+        for (const [key, videoData] of Object.entries(attr.editorialVideo)) {
+          if (!videoData.video) continue;
+
+          const lowerKey = key.toLowerCase();
+          let variantType = null;
+          let commercialName = '';
+          let isTall = false;
+
+          if (lowerKey.includes('square') || lowerKey.includes('detaildog') || lowerKey.includes('detailmin')) {
+            if (processedTypes.has('square')) continue;
+            processedTypes.add('square');
+            variantType = 'square';
+            commercialName = 'Square (1:1)';
+            isTall = false;
+          } else if (lowerKey.includes('tall')) {
+            if (processedTypes.has('tall')) continue;
+            processedTypes.add('tall');
+            variantType = 'tall';
+            commercialName = 'Tall (3:4)';
+            isTall = true;
+          } else {
+            continue;
+          }
+
+          const previewUrl = formatUrl(videoData.previewFrame?.url, 400, 400);
+          const masterUrl = videoData.video;
+          const uniqueId = Math.random().toString(36).substr(2, 9);
+          const videoElemId = 'hls-vid-' + uniqueId;
+
+          let playableStreamUrl = masterUrl;
+
+          try {
+            const playlistRes = await fetch(masterUrl);
+            if (playlistRes.ok) {
+              const playlistText = await playlistRes.text();
+              const parsedStreams = parseM3U8(playlistText);
+
+              if (parsedStreams.length > 0) {
+                const target1080 = parsedStreams.find(st => st.resolution.includes('1080')) || parsedStreams[0];
+                playableStreamUrl = target1080.url;
+
+                if (variantType === 'square') {
+                  squareData = {
+                    res1080: getBestStreamForResolution(parsedStreams, '1080x1080'),
+                    res2160: getBestStreamForResolution(parsedStreams, '2160x2160'),
+                    masterUrl: masterUrl
+                  };
+                } else if (variantType === 'tall') {
+                  tallData = {
+                    res1080: getBestStreamForResolution(parsedStreams, '1080x1440'),
+                    res2048: getBestStreamForResolution(parsedStreams, '2048x2732'),
+                    masterUrl: masterUrl
+                  };
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('Could not inspect playlist CORS/network:', e);
+            if (variantType === 'square') {
+              squareData = { res1080: null, res2160: null, masterUrl };
+            } else if (variantType === 'tall') {
+              tallData = { res1080: null, res2048: null, masterUrl };
+            }
+          }
+
+          previewCardsHTML += `
+            <div class="video-card ${isTall ? 'tall' : ''}">
+              <div class="video-preview-wrap">
+                <video id="${videoElemId}" class="video-preview" autoplay loop muted playsinline poster="${previewUrl}"></video>
+              </div>
+              <div class="video-label">${commercialName}</div>
+            </div>
+          `;
+
+          setTimeout(() => {
+            const videoElement = document.getElementById(videoElemId);
+            if (videoElement && playableStreamUrl) {
+              if (Hls.isSupported()) {
+                const hls = new Hls({ maxBufferLength: 5, maxMaxBufferLength: 10 });
+                hls.loadSource(playableStreamUrl);
+                hls.attachMedia(videoElement);
+              } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+                videoElement.src = playableStreamUrl;
+              }
+            }
+          }, 100);
+        }
+
+        if (squareData || tallData) {
+          const markdownText = buildFormattedMarkdown(squareData, tallData);
+          const textareaId = 'md-out-' + Math.random().toString(36).substr(2, 9);
+
+          videoSectionHTML = `
+            <div class="videos-section">
+              <h3>Animated Artwork</h3>
+              <div class="preview-row">
+                ${previewCardsHTML}
+              </div>
+              <div class="markdown-box">
+                <div class="markdown-header">
+                  <span>Formatted Output (Highest Bitrate)</span>
+                  <button class="btn-copy" onclick="copyMarkdownText('${textareaId}', this)">Copy to Clipboard</button>
+                </div>
+                <textarea id="${textareaId}" class="markdown-textarea" readonly>${markdownText}</textarea>
+              </div>
+            </div>
+          `;
+        }
+      }
+
+      if (!videoSectionHTML) {
+        videoSectionHTML = `
+          <div class="videos-section">
+            <p style="color: var(--text-muted); font-size: 0.85rem;">No Animated Artwork available for this release.</p>
+          </div>
+        `;
+      }
+
+      card.innerHTML = `
+        <div class="album-header">
+          <a href="${maxArtworkUrl}" target="_blank" rel="noopener noreferrer" title="View max res artwork">
+            <img class="album-artwork" src="${smallArtworkUrl}" alt="${attr.name || 'Album cover'}">
+          </a>
+          <div class="album-info">
+            <h2>${attr.name || 'Unknown Title'} ${explicitBadgeHTML}</h2>
+            <p><strong>Artist:</strong> ${attr.artistName || 'Unknown'}</p>
+            <p><strong>Release:</strong> ${attr.releaseDate || 'N/A'}</p>
+            <p><strong>Tracks:</strong> ${attr.trackCount || 0}</p>
+            <a href="${maxArtworkUrl}" target="_blank" rel="noopener noreferrer" class="max-res-badge">
+              Maximum resolution artwork (${artWidth}x${artHeight})
+            </a>
+          </div>
+        </div>
+        ${videoSectionHTML}
+      `;
+
+      return card;
+    }
+  </script>
+
+</body>
+</html>
