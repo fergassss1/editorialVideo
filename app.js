@@ -4,10 +4,11 @@ const SF_SYMBOL_BASE = 'https://raw.githubusercontent.com/brendanballon/sfsymbol
 const state = {
   query: '',
   storefront: 'us',
-  activeNav: 'albums',
-  viewMode: 'search', // 'search' | 'album'
-  selectedAlbumId: null,
-  selectedAlbumData: null,
+  activeNav: 'albums', // 'albums' | 'artists' | 'playlists'
+  viewMode: 'search', // 'search' | 'album' | 'artist' | 'playlist'
+  selectedId: null,
+  selectedData: null,
+  history: [],
   searchResults: {
     albums: [],
     artists: [],
@@ -22,6 +23,8 @@ const symbolCache = new Map();
 const activeHlsInstances = [];
 
 const dom = {
+  sidebar: document.getElementById('sidebar'),
+  mobileNavToggle: document.getElementById('mobileNavToggle'),
   sidebarSearchForm: document.getElementById('sidebarSearchForm'),
   sidebarSearchInput: document.getElementById('sidebarSearchInput'),
   storefrontInput: document.getElementById('storefrontInput'),
@@ -36,6 +39,54 @@ const dom = {
   toastBanner: document.getElementById('toastBanner'),
   previewAudio: document.getElementById('previewAudio')
 };
+
+function snapshotRoute() {
+  return {
+    viewMode: state.viewMode,
+    selectedId: state.selectedId,
+    activeNav: state.activeNav,
+    query: state.query
+  };
+}
+
+function pushHistory() {
+  const snap = snapshotRoute();
+  const prev = state.history[state.history.length - 1];
+  if (
+    !prev ||
+    prev.viewMode !== snap.viewMode ||
+    prev.selectedId !== snap.selectedId ||
+    prev.activeNav !== snap.activeNav ||
+    prev.query !== snap.query
+  ) {
+    state.history.push(snap);
+  }
+}
+
+async function goBack() {
+  const prev = state.history.pop();
+  if (!prev) return;
+  state.activeNav = prev.activeNav;
+  syncNavActiveState();
+  if (prev.viewMode === 'album' && prev.selectedId) {
+    await openAlbumDetail(prev.selectedId, { recordHistory: false });
+  } else if (prev.viewMode === 'artist' && prev.selectedId) {
+    await openArtistDetail(prev.selectedId, { recordHistory: false });
+  } else if (prev.viewMode === 'playlist' && prev.selectedId) {
+    await openPlaylistDetail(prev.selectedId, { recordHistory: false });
+  } else {
+    state.viewMode = 'search';
+    state.selectedId = null;
+    state.selectedData = null;
+    renderSearchView();
+  }
+}
+
+function syncNavActiveState() {
+  dom.navItems.forEach((btn) => {
+    btn.classList.toggle('is-active', btn.dataset.nav === state.activeNav);
+  });
+}
 
 /* ==========================================================================
    SF Symbols Loader (strips bounding outlines & renders in white/currentColor)
@@ -56,14 +107,12 @@ async function loadSfSymbolSvg(name) {
       const svg = doc.querySelector('svg');
       if (!svg) return null;
 
-      // Prefer Regular-S or Medium-S layer if present so we don't render multi-weight/template overlays
       const preferredLayer =
         svg.querySelector('#Regular-S') ||
         svg.querySelector('[id*="Regular-S"]') ||
         svg.querySelector('#Medium-S') ||
         svg.querySelector('[id*="Medium-S"]');
 
-      let targetContainer = svg;
       if (preferredLayer) {
         const wrapper = doc.createElementNS('http://www.w3.org/2000/svg', 'g');
         const cloned = preferredLayer.cloneNode(true);
@@ -73,12 +122,10 @@ async function loadSfSymbolSvg(name) {
         svg.appendChild(wrapper);
       }
 
-      // Remove bounding rectangles, guide lines, and non-glyph template layers
       svg.querySelectorAll('rect, line, #Notes, #Guides, [id*="Notes"], [id*="Guides"]').forEach((el) => {
         el.remove();
       });
 
-      // Strip strokes/outlines and force fill="currentColor"
       svg.querySelectorAll('*').forEach((el) => {
         el.removeAttribute('stroke');
         el.removeAttribute('stroke-width');
@@ -118,7 +165,7 @@ async function hydrateSfSymbols(root = document) {
 }
 
 /* ==========================================================================
-   Helpers: Formatting, Clipboard, Audio Preview, HLS & M3U8
+   Helpers: Formatting, Safe Editorial HTML, Clipboard, Audio Preview & HLS
    ========================================================================== */
 function formatArtworkUrl(rawUrl, width = 600, height = 600) {
   if (!rawUrl) return '';
@@ -144,6 +191,28 @@ function escapeHtml(str = '') {
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
+}
+
+function stripHtmlTags(str = '') {
+  return String(str).replace(/<[^>]*>/g, '');
+}
+
+/**
+ * Safely renders Apple Music editorialNotes strings that contain <b>, <strong>, <i>, <em>, <br>
+ * while escaping any unsafe tags or event handlers.
+ */
+function formatEditorialHtml(rawHtml = '') {
+  if (!rawHtml) return '';
+  const safe = String(rawHtml)
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+    .replace(/<\/?(b|strong|i|em|br)\s*\/?>/gi, (match) => `@@TAG:${match.toLowerCase()}@@`)
+    .replace(/<[^>]*>/g, '');
+
+  const escaped = escapeHtml(safe);
+  return escaped.replace(/@@TAG:(<\/?(?:b|strong|i|em|br)\s*\/?>)@@/g, (_, tag) => {
+    if (tag.startsWith('<br')) return '<br>';
+    return tag;
+  });
 }
 
 let toastTimer = null;
@@ -180,11 +249,11 @@ function toggleTrackPreview(trackId, previewUrl, rowEl) {
   if (state.playingTrackId === trackId && !dom.previewAudio.paused) {
     dom.previewAudio.pause();
     state.playingTrackId = null;
-    document.querySelectorAll('.track-row.is-playing').forEach((r) => r.classList.remove('is-playing'));
+    document.querySelectorAll('.track-row.is-playing, .top-tile.is-playing').forEach((r) => r.classList.remove('is-playing'));
     return;
   }
 
-  document.querySelectorAll('.track-row.is-playing').forEach((r) => r.classList.remove('is-playing'));
+  document.querySelectorAll('.track-row.is-playing, .top-tile.is-playing').forEach((r) => r.classList.remove('is-playing'));
   dom.previewAudio.src = previewUrl;
   dom.previewAudio.play().catch(() => showToast('Unable to play preview'));
   state.playingTrackId = trackId;
@@ -193,28 +262,31 @@ function toggleTrackPreview(trackId, previewUrl, rowEl) {
 
 dom.previewAudio.addEventListener('ended', () => {
   state.playingTrackId = null;
-  document.querySelectorAll('.track-row.is-playing').forEach((r) => r.classList.remove('is-playing'));
+  document.querySelectorAll('.track-row.is-playing, .top-tile.is-playing').forEach((r) => r.classList.remove('is-playing'));
 });
 
 function toMp4Url(url) {
   if (!url) return '';
-  return url.replace(/\.m3u8(\?.*)?$/, '-$.mp4'.replace('$', '')).replace(/\.m3u8$/, '-.mp4');
+  return url.replace(/\.m3u8(\?.*)?$/, '-.mp4');
 }
 
 function parseM3U8(content) {
   const streams = [];
-  const lines = content.split('\n');
+  const lines = content.split('
+');
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     if (line.startsWith('#EXT-X-STREAM-INF:')) {
       const attrs = line.substring(18);
       const resMatch = attrs.match(/RESOLUTION=([0-9x]+)/);
       const bwMatch = attrs.match(/BANDWIDTH=([0-9]+)/);
+      const codecsMatch = attrs.match(/CODECS="([^"]+)"/);
       const nextUrl = lines[i + 1] && !lines[i + 1].startsWith('#') ? lines[i + 1].trim() : '';
       if (nextUrl) {
         streams.push({
-          resolution: resMatch ? resMatch[1] : '',
+          resolution: resMatch ? resMatch[1] : 'Stream',
           bandwidthNum: bwMatch ? parseInt(bwMatch[1], 10) : 0,
+          codecs: codecsMatch ? codecsMatch[1] : '',
           url: nextUrl
         });
       }
@@ -241,12 +313,26 @@ function cleanupHlsPlayers() {
   }
 }
 
+function attachHlsToVideo(videoEl, playUrl) {
+  if (!videoEl || !playUrl) return;
+  if (window.Hls && window.Hls.isSupported()) {
+    const hls = new window.Hls({ maxBufferLength: 5, maxMaxBufferLength: 10 });
+    hls.loadSource(playUrl);
+    hls.attachMedia(videoEl);
+    activeHlsInstances.push(hls);
+  } else if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
+    videoEl.src = playUrl;
+  } else {
+    videoEl.src = playUrl;
+  }
+}
+
 /* ==========================================================================
    AMP-API Requests via Cloudflare Worker
    ========================================================================== */
 async function fetchCatalogSearch(term, storefront = 'us') {
   const types = 'albums,artists,songs,playlists,music-videos';
-  const url = `${WORKER_BASE}/v1/catalog/${encodeURIComponent(storefront)}/search?term=${encodeURIComponent(term)}&types=${types}&extend=editorialVideo&limit=12`;
+  const url = `${WORKER_BASE}/v1/catalog/${encodeURIComponent(storefront)}/search?term=${encodeURIComponent(term)}&types=${types}&extend=editorialVideo,editorialNotes&limit=12`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Catalog search failed (${res.status})`);
   const json = await res.json();
@@ -268,12 +354,40 @@ async function fetchAlbumDetail(albumId, storefront = 'us') {
   return json.data?.[0] || null;
 }
 
+async function fetchArtistDetail(artistId, storefront = 'us') {
+  const url = `${WORKER_BASE}/v1/catalog/${encodeURIComponent(storefront)}/artists/${encodeURIComponent(artistId)}?include=albums,playlists&extend=editorialVideo,editorialNotes`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Artist fetch failed (${res.status})`);
+  const json = await res.json();
+  return json.data?.[0] || null;
+}
+
+async function fetchPlaylistDetail(playlistId, storefront = 'us') {
+  const url = `${WORKER_BASE}/v1/catalog/${encodeURIComponent(storefront)}/playlists/${encodeURIComponent(playlistId)}?include=tracks&extend=editorialVideo,editorialNotes`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Playlist fetch failed (${res.status})`);
+  const json = await res.json();
+  return json.data?.[0] || null;
+}
+
 /* ==========================================================================
-   Render Views: Search Canvas & Album Detail View
+   Render Top Header Bar (with Back History + Search)
    ========================================================================== */
-function renderTopSearchBar() {
+function renderTopHeader() {
+  const canGoBack = state.history.length > 0;
   return `
-    <div class="main-search-bar-wrap">
+    <header class="main-top-header">
+      <button
+        id="backNavBtn"
+        type="button"
+        class="back-nav-btn"
+        ${canGoBack ? '' : 'disabled'}
+        title="Go back"
+      >
+        <span class="sf-icon" data-sf-symbol="chevron.left" aria-hidden="true"></span>
+        <span>Back</span>
+      </button>
+
       <form id="mainSearchForm" class="main-search-pill" autocomplete="off">
         <span class="sf-icon search-icon" data-sf-symbol="magnifyingglass" aria-hidden="true"></span>
         <input
@@ -284,7 +398,9 @@ function renderTopSearchBar() {
           aria-label="Search catalog"
         />
       </form>
-    </div>
+
+      <div class="top-header-spacer">${escapeHtml(state.storefront)}</div>
+    </header>
   `;
 }
 
@@ -293,7 +409,7 @@ function renderMediaCard(item, kind = 'album') {
   const title = attr.name || 'Untitled';
   const subtitle =
     kind === 'artist'
-      ? ''
+      ? (attr.genreNames || [])[0] || 'Artist'
       : kind === 'playlist'
         ? attr.curatorName || 'Playlist'
         : attr.artistName || '';
@@ -312,7 +428,43 @@ function renderMediaCard(item, kind = 'album') {
   `;
 }
 
+function renderQualityBadgesFromTracks(tracks = []) {
+  const allVariants = new Set(tracks.flatMap((t) => t.attributes?.audioVariants || []));
+  const traits = new Set(tracks.flatMap((t) => t.attributes?.audioTraits || []));
+
+  const badges = [];
+  if (allVariants.has('dolby-atmos') || traits.has('atmos') || traits.has('spatial')) {
+    badges.push(`<span class="badge-icon badge-dolby" title="Dolby Atmos"></span>`);
+  }
+  if (allVariants.has('hi-res-lossless') || traits.has('hi-res-lossless')) {
+    badges.push(`<span class="badge-icon badge-hires-lossless" title="Hi-Res Lossless"></span>`);
+  } else if (allVariants.has('lossless') || traits.has('lossless')) {
+    badges.push(`<span class="badge-icon badge-lossless" title="Lossless"></span>`);
+  }
+  return badges.join('');
+}
+
+function renderTrackQualityTags(tAttr = {}) {
+  const variants = new Set(tAttr.audioVariants || []);
+  const traits = new Set(tAttr.audioTraits || []);
+  const tags = [];
+
+  if (variants.has('dolby-atmos') || traits.has('atmos')) {
+    tags.push(`<span class="quality-pill">Atmos</span>`);
+  }
+  if (variants.has('hi-res-lossless') || traits.has('hi-res-lossless')) {
+    tags.push(`<span class="quality-pill">Hi-Res</span>`);
+  } else if (variants.has('lossless') || traits.has('lossless')) {
+    tags.push(`<span class="quality-pill">Lossless</span>`);
+  }
+  return tags.join('');
+}
+
+/* ==========================================================================
+   Render Views: Search Canvas, Album, Artist & Playlist
+   ========================================================================== */
 function renderSearchView() {
+  state.viewMode = 'search';
   document.documentElement.style.setProperty('--hero-tint', '#4a5373');
   const { albums, artists, songs, playlists, musicVideos } = state.searchResults;
 
@@ -337,8 +489,15 @@ function renderSearchView() {
             .map(({ kind, label, item }) => {
               const attr = item.attributes || {};
               const art = formatArtworkUrl(attr.artwork?.url, 180, 180);
+              const previewUrl = kind === 'song' ? attr.previews?.[0]?.url || '' : '';
               return `
-                <button type="button" class="top-tile" data-open-kind="${kind}" data-open-id="${item.id}">
+                <button
+                  type="button"
+                  class="top-tile"
+                  data-open-kind="${kind}"
+                  data-open-id="${item.id}"
+                  ${previewUrl ? `data-preview-url="${escapeHtml(previewUrl)}"` : ''}
+                >
                   ${
                     art
                       ? `<img class="top-tile-art ${kind === 'artist' ? 'is-circle' : ''}" src="${art}" alt="${escapeHtml(attr.name || '')}" />`
@@ -357,11 +516,11 @@ function renderSearchView() {
     `
     : '';
 
-  const albumsHtml = albums.length
+  const albumsShelf = albums.length
     ? `
       <section class="shelf-section">
         <div class="shelf-header">
-          <button type="button" class="shelf-title-btn">
+          <button type="button" class="shelf-title-btn" data-filter-nav="albums">
             <span>Albums</span>
             <span class="sf-icon" data-sf-symbol="chevron.right" aria-hidden="true"></span>
           </button>
@@ -373,11 +532,11 @@ function renderSearchView() {
     `
     : '';
 
-  const artistsHtml = artists.length
+  const artistsShelf = artists.length
     ? `
       <section class="shelf-section">
         <div class="shelf-header">
-          <button type="button" class="shelf-title-btn">
+          <button type="button" class="shelf-title-btn" data-filter-nav="artists">
             <span>Artists</span>
             <span class="sf-icon" data-sf-symbol="chevron.right" aria-hidden="true"></span>
           </button>
@@ -389,11 +548,11 @@ function renderSearchView() {
     `
     : '';
 
-  const playlistsHtml = playlists.length
+  const playlistsShelf = playlists.length
     ? `
       <section class="shelf-section">
         <div class="shelf-header">
-          <button type="button" class="shelf-title-btn">
+          <button type="button" class="shelf-title-btn" data-filter-nav="playlists">
             <span>Playlists</span>
             <span class="sf-icon" data-sf-symbol="chevron.right" aria-hidden="true"></span>
           </button>
@@ -405,31 +564,43 @@ function renderSearchView() {
     `
     : '';
 
+  let orderedShelves = '';
+  if (state.activeNav === 'artists') {
+    orderedShelves = `${artistsShelf}${albumsShelf}${playlistsShelf}`;
+  } else if (state.activeNav === 'playlists') {
+    orderedShelves = `${playlistsShelf}${albumsShelf}${artistsShelf}`;
+  } else {
+    orderedShelves = `${albumsShelf}${artistsShelf}${playlistsShelf}`;
+  }
+
   const emptyState =
-    !topHtml && !albumsHtml && !artistsHtml && !playlistsHtml
+    !topHtml && !orderedShelves
       ? `<div class="status-card">Search an album, artist, song, or playlist above to explore catalog &amp; editorial artwork.</div>`
       : '';
 
-  dom.contentArea.innerHTML = `${renderTopSearchBar()}${topHtml}${albumsHtml}${artistsHtml}${playlistsHtml}${emptyState}`;
+  dom.contentArea.innerHTML = `${renderTopHeader()}${topHtml}${orderedShelves}${emptyState}`;
   bindMainViewEvents();
   hydrateSfSymbols(dom.contentArea);
 }
 
-async function openAlbumDetail(albumId) {
+async function openAlbumDetail(albumId, { recordHistory = true } = {}) {
+  if (recordHistory) pushHistory();
   state.viewMode = 'album';
-  state.selectedAlbumId = albumId;
-  dom.contentArea.innerHTML = `${renderTopSearchBar()}<div class="status-card">Loading album details...</div>`;
+  state.selectedId = albumId;
+  dom.contentArea.innerHTML = `${renderTopHeader()}<div class="status-card">Loading album details...</div>`;
   bindMainViewEvents();
   hydrateSfSymbols(dom.contentArea);
 
   try {
     const album = await fetchAlbumDetail(albumId, state.storefront);
     if (!album) {
-      dom.contentArea.innerHTML = `${renderTopSearchBar()}<div class="status-card">Album not found.</div>`;
+      dom.contentArea.innerHTML = `${renderTopHeader()}<div class="status-card">Album not found.</div>`;
+      bindMainViewEvents();
+      hydrateSfSymbols(dom.contentArea);
       return;
     }
 
-    state.selectedAlbumData = album;
+    state.selectedData = album;
     const attr = album.attributes || {};
     const bgHex = attr.artwork?.bgColor ? `#${attr.artwork.bgColor}` : '#4a5373';
     document.documentElement.style.setProperty('--hero-tint', bgHex);
@@ -438,21 +609,10 @@ async function openAlbumDetail(albumId) {
     const year = attr.releaseDate ? attr.releaseDate.slice(0, 4) : '';
     const genre = (attr.genreNames || [])[0] || '';
     const editorialStandard = attr.editorialNotes?.standard || '';
-    const shortNotes = editorialStandard.length > 130 ? `${editorialStandard.slice(0, 127)}...` : editorialStandard;
+    const plainEditorial = stripHtmlTags(editorialStandard);
+    const needsTruncate = plainEditorial.length > 140;
     const tracks = album.relationships?.tracks?.data || [];
-
-    // Audio variant badges derived from track audioVariants when available
-    const allVariants = new Set(
-      tracks.flatMap((t) => t.attributes?.audioVariants || [])
-    );
-    const qualityBadgesHtml = [
-      allVariants.has('dolby-atmos') ? `<span class="badge-icon badge-dolby" title="Dolby Atmos"></span>` : '',
-      allVariants.has('hi-res-lossless')
-        ? `<span class="badge-icon badge-hires-lossless" title="Hi-Res Lossless"></span>`
-        : allVariants.has('lossless')
-          ? `<span class="badge-icon badge-lossless" title="Lossless"></span>`
-          : ''
-    ].join('');
+    const qualityBadgesHtml = renderQualityBadgesFromTracks(tracks);
 
     const metaParts = [genre, year, qualityBadgesHtml].filter(Boolean).join(' · ');
 
@@ -461,6 +621,7 @@ async function openAlbumDetail(albumId) {
         const tAttr = track.attributes || {};
         const previewUrl = tAttr.previews?.[0]?.url || '';
         const explicitBadge = tAttr.contentRating === 'explicit' ? `<span class="explicit-tag">E</span>` : '';
+        const qualityTags = renderTrackQualityTags(tAttr);
         return `
           <div
             class="track-row"
@@ -470,6 +631,7 @@ async function openAlbumDetail(albumId) {
           >
             <span class="track-num">${idx + 1}</span>
             <span class="track-title">${escapeHtml(tAttr.name || '')} ${explicitBadge}</span>
+            <span class="track-badges">${qualityTags}</span>
             <span class="track-duration">${formatDuration(tAttr.durationInMillis)}</span>
           </div>
         `;
@@ -493,27 +655,32 @@ async function openAlbumDetail(albumId) {
       `
       : '';
 
-    dom.contentArea.innerHTML = `
-      ${renderTopSearchBar()}
+    const artistId = album.relationships?.artists?.data?.[0]?.id || '';
 
-      <section class="album-hero">
-        <button id="openArtworkModalBtn" type="button" class="album-cover-btn" title="Open hi-res static & animated artwork">
+    dom.contentArea.innerHTML = `
+      ${renderTopHeader()}
+
+      <section class="detail-hero">
+        <button id="openMediaModalBtn" type="button" class="detail-cover-btn" title="Open hi-res static & animated artwork, M3U8/MP4 streams">
           ${coverUrl ? `<img src="${coverUrl}" alt="${escapeHtml(attr.name || '')}" />` : ''}
         </button>
 
-        <div class="album-hero-meta">
-          <h1 class="album-hero-title copyable-text" data-copy-text="${escapeHtml(attr.name || '')}">${escapeHtml(attr.name || '')}</h1>
-          <div class="album-hero-artist copyable-text" data-copy-text="${escapeHtml(attr.artistName || '')}">${escapeHtml(attr.artistName || '')}</div>
-          <div class="album-meta-line">${metaParts}</div>
+        <div class="detail-hero-meta">
+          <h1 class="detail-hero-title copyable-text" data-copy-text="${escapeHtml(attr.name || '')}">${escapeHtml(attr.name || '')}</h1>
+          <div
+            class="detail-hero-artist"
+            ${artistId ? `data-open-kind="artist" data-open-id="${escapeHtml(artistId)}"` : `data-copy-text="${escapeHtml(attr.artistName || '')}"`}
+          >${escapeHtml(attr.artistName || '')}</div>
+          <div class="detail-meta-line">${metaParts}</div>
 
           ${
             editorialStandard
               ? `
                 <div class="editorial-notes-box">
-                  <span id="editorialNotesText">${escapeHtml(shortNotes)}</span>
+                  <span id="editorialNotesText">${formatEditorialHtml(editorialStandard)}</span>
                   ${
-                    editorialStandard.length > 130
-                      ? `<button id="toggleNotesBtn" type="button" class="editorial-more-btn">MORE</button>`
+                    needsTruncate
+                      ? `<button id="toggleNotesBtn" type="button" class="editorial-more-btn">LESS</button>`
                       : ''
                   }
                 </div>
@@ -542,18 +709,20 @@ async function openAlbumDetail(albumId) {
     `;
 
     const toggleBtn = document.getElementById('toggleNotesBtn');
-    if (toggleBtn) {
-      let expanded = false;
+    const notesEl = document.getElementById('editorialNotesText');
+    if (toggleBtn && notesEl) {
+      let expanded = true;
+      const truncatedPlain = `${plainEditorial.slice(0, 137)}...`;
       toggleBtn.addEventListener('click', () => {
         expanded = !expanded;
-        document.getElementById('editorialNotesText').textContent = expanded ? editorialStandard : shortNotes;
+        notesEl.innerHTML = expanded ? formatEditorialHtml(editorialStandard) : escapeHtml(truncatedPlain);
         toggleBtn.textContent = expanded ? 'LESS' : 'MORE';
       });
     }
 
-    const artModalBtn = document.getElementById('openArtworkModalBtn');
-    if (artModalBtn) {
-      artModalBtn.addEventListener('click', () => openAlbumMediaModal(album));
+    const mediaBtn = document.getElementById('openMediaModalBtn');
+    if (mediaBtn) {
+      mediaBtn.addEventListener('click', () => openItemMediaModal(album, 'album'));
     }
 
     document.querySelectorAll('.track-row').forEach((row) => {
@@ -565,24 +734,190 @@ async function openAlbumDetail(albumId) {
     bindMainViewEvents();
     hydrateSfSymbols(dom.contentArea);
   } catch (err) {
-    dom.contentArea.innerHTML = `${renderTopSearchBar()}<div class="status-card">Error: ${escapeHtml(err.message)}</div>`;
+    dom.contentArea.innerHTML = `${renderTopHeader()}<div class="status-card">Error: ${escapeHtml(err.message)}</div>`;
+    bindMainViewEvents();
+    hydrateSfSymbols(dom.contentArea);
+  }
+}
+
+async function openArtistDetail(artistId, { recordHistory = true } = {}) {
+  if (recordHistory) pushHistory();
+  state.viewMode = 'artist';
+  state.selectedId = artistId;
+  dom.contentArea.innerHTML = `${renderTopHeader()}<div class="status-card">Loading artist profile...</div>`;
+  bindMainViewEvents();
+  hydrateSfSymbols(dom.contentArea);
+
+  try {
+    const artist = await fetchArtistDetail(artistId, state.storefront);
+    const cached = state.searchResults.artists.find((a) => a.id === artistId);
+    const data = artist || cached;
+
+    if (!data) {
+      dom.contentArea.innerHTML = `${renderTopHeader()}<div class="status-card">Artist not found.</div>`;
+      bindMainViewEvents();
+      hydrateSfSymbols(dom.contentArea);
+      return;
+    }
+
+    state.selectedData = data;
+    const attr = data.attributes || {};
+    const bgHex = attr.artwork?.bgColor ? `#${attr.artwork.bgColor}` : '#4a5373';
+    document.documentElement.style.setProperty('--hero-tint', bgHex);
+
+    const artUrl = formatArtworkUrl(attr.artwork?.url, 600, 600);
+    const genres = (attr.genreNames || []).slice(0, 3).join(' · ');
+    const editorialRaw = attr.editorialNotes?.standard || attr.editorialNotes?.short || '';
+    const relAlbums = data.relationships?.albums?.data || state.searchResults.albums || [];
+
+    dom.contentArea.innerHTML = `
+      ${renderTopHeader()}
+
+      <section class="detail-hero">
+        <button id="openMediaModalBtn" type="button" class="detail-cover-btn is-artist" title="Open artist artwork & editorial motion">
+          ${artUrl ? `<img src="${artUrl}" alt="${escapeHtml(attr.name || '')}" />` : ''}
+        </button>
+
+        <div class="detail-hero-meta">
+          <h1 class="detail-hero-title copyable-text" data-copy-text="${escapeHtml(attr.name || '')}">${escapeHtml(attr.name || '')}</h1>
+          <div class="detail-meta-line">${escapeHtml(genres || 'Artist')}</div>
+          ${
+            editorialRaw
+              ? `<div class="editorial-notes-box">${formatEditorialHtml(editorialRaw)}</div>`
+              : ''
+          }
+          <div class="action-row" style="margin-top: 0.5rem;">
+            <button type="button" class="btn-ghost" id="artistSearchAllBtn">Search "${escapeHtml(attr.name || '')}" releases</button>
+          </div>
+        </div>
+      </section>
+
+      ${
+        relAlbums.length
+          ? `
+            <section class="shelf-section">
+              <div class="shelf-header">
+                <span class="shelf-title-btn">Albums &amp; Releases</span>
+              </div>
+              <div class="horizontal-shelf">
+                ${relAlbums.map((a) => renderMediaCard(a, 'album')).join('')}
+              </div>
+            </section>
+          `
+          : ''
+      }
+    `;
+
+    document.getElementById('openMediaModalBtn')?.addEventListener('click', () => openItemMediaModal(data, 'artist'));
+    document.getElementById('artistSearchAllBtn')?.addEventListener('click', () => runSearch(attr.name || ''));
+
+    bindMainViewEvents();
+    hydrateSfSymbols(dom.contentArea);
+  } catch (err) {
+    dom.contentArea.innerHTML = `${renderTopHeader()}<div class="status-card">Error: ${escapeHtml(err.message)}</div>`;
+    bindMainViewEvents();
+    hydrateSfSymbols(dom.contentArea);
+  }
+}
+
+async function openPlaylistDetail(playlistId, { recordHistory = true } = {}) {
+  if (recordHistory) pushHistory();
+  state.viewMode = 'playlist';
+  state.selectedId = playlistId;
+  dom.contentArea.innerHTML = `${renderTopHeader()}<div class="status-card">Loading playlist...</div>`;
+  bindMainViewEvents();
+  hydrateSfSymbols(dom.contentArea);
+
+  try {
+    const playlist = await fetchPlaylistDetail(playlistId, state.storefront);
+    const cached = state.searchResults.playlists.find((p) => p.id === playlistId);
+    const data = playlist || cached;
+
+    if (!data) {
+      dom.contentArea.innerHTML = `${renderTopHeader()}<div class="status-card">Playlist not found.</div>`;
+      bindMainViewEvents();
+      hydrateSfSymbols(dom.contentArea);
+      return;
+    }
+
+    state.selectedData = data;
+    const attr = data.attributes || {};
+    const bgHex = attr.artwork?.bgColor ? `#${attr.artwork.bgColor}` : '#4a5373';
+    document.documentElement.style.setProperty('--hero-tint', bgHex);
+
+    const artUrl = formatArtworkUrl(attr.artwork?.url, 600, 600);
+    const descRaw = attr.description?.standard || attr.editorialNotes?.standard || '';
+    const tracks = data.relationships?.tracks?.data || [];
+
+    const tracksHtml = tracks
+      .map((track, idx) => {
+        const tAttr = track.attributes || {};
+        const previewUrl = tAttr.previews?.[0]?.url || '';
+        return `
+          <div
+            class="track-row"
+            data-track-id="${track.id}"
+            data-preview-url="${escapeHtml(previewUrl)}"
+          >
+            <span class="track-num">${idx + 1}</span>
+            <span class="track-title">${escapeHtml(tAttr.name || '')} — ${escapeHtml(tAttr.artistName || '')}</span>
+            <span class="track-badges">${renderTrackQualityTags(tAttr)}</span>
+            <span class="track-duration">${formatDuration(tAttr.durationInMillis)}</span>
+          </div>
+        `;
+      })
+      .join('');
+
+    dom.contentArea.innerHTML = `
+      ${renderTopHeader()}
+
+      <section class="detail-hero">
+        <button id="openMediaModalBtn" type="button" class="detail-cover-btn" title="Open playlist artwork & streams">
+          ${artUrl ? `<img src="${artUrl}" alt="${escapeHtml(attr.name || '')}" />` : ''}
+        </button>
+
+        <div class="detail-hero-meta">
+          <h1 class="detail-hero-title copyable-text" data-copy-text="${escapeHtml(attr.name || '')}">${escapeHtml(attr.name || '')}</h1>
+          <div class="detail-hero-artist">${escapeHtml(attr.curatorName || 'Apple Music')}</div>
+          ${descRaw ? `<div class="editorial-notes-box">${formatEditorialHtml(descRaw)}</div>` : ''}
+        </div>
+      </section>
+
+      ${
+        tracks.length
+          ? `<section class="tracklist" aria-label="Playlist tracks">${tracksHtml}</section>`
+          : `<div class="status-card">No track preview list returned for this playlist.</div>`
+      }
+    `;
+
+    document.getElementById('openMediaModalBtn')?.addEventListener('click', () => openItemMediaModal(data, 'playlist'));
+    document.querySelectorAll('.track-row').forEach((row) => {
+      row.addEventListener('click', () => {
+        toggleTrackPreview(row.dataset.trackId, row.dataset.previewUrl, row);
+      });
+    });
+
+    bindMainViewEvents();
+    hydrateSfSymbols(dom.contentArea);
+  } catch (err) {
+    dom.contentArea.innerHTML = `${renderTopHeader()}<div class="status-card">Error: ${escapeHtml(err.message)}</div>`;
     bindMainViewEvents();
     hydrateSfSymbols(dom.contentArea);
   }
 }
 
 /* ==========================================================================
-   Artwork & Animated Artwork Modal (includes Markdown export)
+   Artwork, Variant Selector, M3U8 / MP4 Streams & Markdown Modal
    ========================================================================== */
-async function openAlbumMediaModal(album) {
+async function openItemMediaModal(item, kind = 'album') {
   cleanupHlsPlayers();
-  const attr = album.attributes || {};
+  const attr = item.attributes || {};
   const maxW = attr.artwork?.width || 3000;
   const maxH = attr.artwork?.height || 3000;
   const maxArtworkUrl = formatArtworkUrl(attr.artwork?.url, maxW, maxH);
 
-  dom.modalTitle.textContent = attr.name || 'Artwork';
-  dom.modalSubtitle.textContent = `${attr.artistName || ''} · Max static ${maxW}x${maxH}`;
+  dom.modalTitle.textContent = attr.name || 'Artwork & Media';
+  dom.modalSubtitle.textContent = `${attr.artistName || attr.curatorName || kind} · Max static ${maxW}x${maxH}`;
   dom.modalBody.innerHTML = `
     <div class="modal-section">
       <h3>Static Artwork</h3>
@@ -592,146 +927,165 @@ async function openAlbumMediaModal(album) {
       </div>
     </div>
     <div class="modal-section">
-      <h3>Animated Artwork &amp; Markdown</h3>
-      <div id="motionVariantsContainer" class="status-card">Inspecting editorialVideo variants...</div>
+      <h3>Animated Artwork Variants &amp; M3U8 / MP4 Streams</h3>
+      <div id="motionVariantsContainer" class="status-card">Inspecting editorialVideo variants &amp; streams...</div>
     </div>
   `;
 
   dom.mediaModal.hidden = false;
   hydrateSfSymbols(dom.mediaModal);
 
-  const copyStaticBtn = document.getElementById('copyStaticUrlBtn');
-  if (copyStaticBtn) {
-    copyStaticBtn.addEventListener('click', () => copyToClipboard(maxArtworkUrl, 'Copied static artwork URL'));
-  }
+  document.getElementById('copyStaticUrlBtn')?.addEventListener('click', () => {
+    copyToClipboard(maxArtworkUrl, 'Copied static artwork URL');
+  });
 
   const editorialVideo = attr.editorialVideo || {};
-  const entries = Object.entries(editorialVideo).filter(([, v]) => v?.video);
+  const entries = Object.entries(editorialVideo).filter(([, v]) => v && (v.video || v.previewFrame?.url));
   const container = document.getElementById('motionVariantsContainer');
 
   if (!entries.length) {
-    container.textContent = 'No animated artwork variants found for this release.';
+    container.textContent = 'No animated artwork variants found for this item.';
     return;
   }
 
-  const seenTypes = new Set();
-  const cardsHtml = [];
-  const hlsQueue = [];
-  let squareMd = null;
-  let tallMd = null;
-
+  const variants = [];
   for (const [key, vData] of entries) {
-    const lower = key.toLowerCase();
-    let variantType = null;
-    let label = key;
-    let isTall = false;
-
-    if (lower.includes('square') || lower.includes('detaildog') || lower.includes('detailmin')) {
-      if (seenTypes.has('square')) continue;
-      seenTypes.add('square');
-      variantType = 'square';
-      label = 'Square (1:1)';
-    } else if (lower.includes('tall')) {
-      if (seenTypes.has('tall')) continue;
-      seenTypes.add('tall');
-      variantType = 'tall';
-      label = 'Tall (3:4)';
-      isTall = true;
-    } else {
-      continue;
-    }
-
-    const vidId = `hls-${Math.random().toString(36).slice(2, 9)}`;
-    const masterUrl = vData.video;
-    const posterUrl = formatArtworkUrl(vData.previewFrame?.url, 400, 400);
-
-    let playUrl = masterUrl;
-    try {
-      const m3u8Res = await fetch(masterUrl);
-      if (m3u8Res.ok) {
-        const parsed = parseM3U8(await m3u8Res.text());
-        if (parsed.length) {
-          const v1080 = parsed.find((s) => s.resolution.includes('1080')) || parsed[0];
-          playUrl = v1080.url;
-          if (variantType === 'square') {
-            squareMd = {
-              res1080: pickBestStream(parsed, '1080x1080'),
-              res2160: pickBestStream(parsed, '2160x2160'),
-              masterUrl
-            };
-          } else {
-            tallMd = {
-              res1080: pickBestStream(parsed, '1080x1440'),
-              res2048: pickBestStream(parsed, '2048x2732'),
-              masterUrl
-            };
-          }
+    const masterUrl = vData.video || '';
+    const posterUrl = formatArtworkUrl(vData.previewFrame?.url || attr.artwork?.url, 600, 600);
+    let streams = [];
+    if (masterUrl) {
+      try {
+        const res = await fetch(masterUrl);
+        if (res.ok) {
+          streams = parseM3U8(await res.text());
         }
+      } catch {
+        // ignore fetch error on playlist
       }
-    } catch {
-      if (variantType === 'square') squareMd = { res1080: null, res2160: null, masterUrl };
-      if (variantType === 'tall') tallMd = { res1080: null, res2048: null, masterUrl };
+    }
+    variants.push({
+      key,
+      label: key,
+      masterUrl,
+      posterUrl,
+      streams
+    });
+  }
+
+  let selectedIndex = 0;
+
+  const renderVariantDetail = (idx) => {
+    cleanupHlsPlayers();
+    const v = variants[idx];
+    const isTall = v.key.toLowerCase().includes('tall') || v.key.toLowerCase().includes('3x4');
+    const chosenStreamUrl = v.streams.find((s) => s.resolution.includes('1080'))?.url || v.streams[0]?.url || v.masterUrl;
+
+    const mdLines = [`### ${v.label}`];
+    if (v.masterUrl) mdLines.push(`[Master M3U8](<${v.masterUrl}>)`);
+    v.streams.forEach((s) => {
+      const mp4 = toMp4Url(s.url);
+      mdLines.push(`- ${s.resolution}: [M3U8](<${s.url}>) • [MP4](<${mp4}>)`);
+    });
+    const markdownText = mdLines.join('
+');
+
+    container.className = '';
+    container.innerHTML = `
+      <div class="variant-tabs" role="tablist">
+        ${variants
+          .map(
+            (itemV, i) => `
+              <button
+                type="button"
+                class="variant-chip ${i === idx ? 'is-active' : ''}"
+                data-variant-idx="${i}"
+              >${escapeHtml(itemV.label)}</button>
+            `
+          )
+          .join('')}
+      </div>
+
+      <div class="motion-grid">
+        <div class="motion-card ${isTall ? 'is-tall' : ''}">
+          ${
+            v.masterUrl
+              ? `<video id="activeVariantVideo" autoplay loop muted playsinline controls poster="${escapeHtml(v.posterUrl)}"></video>`
+              : `<img src="${escapeHtml(v.posterUrl)}" alt="${escapeHtml(v.label)}" />`
+          }
+          <div><strong>${escapeHtml(v.label)}</strong></div>
+          <div class="action-row" style="margin-bottom:0;">
+            ${
+              v.masterUrl
+                ? `<a class="btn-ghost" href="${escapeHtml(v.masterUrl)}" target="_blank" rel="noopener noreferrer">Master .m3u8</a>
+                   <button type="button" class="btn-ghost" id="copyMasterM3u8Btn">Copy .m3u8</button>`
+                : ''
+            }
+          </div>
+        </div>
+
+        <div>
+          <div class="action-row">
+            <button type="button" class="btn-pill" id="copyVariantMdBtn">Copy Markdown</button>
+          </div>
+          <textarea class="md-output" readonly>${escapeHtml(markdownText)}</textarea>
+        </div>
+      </div>
+
+      ${
+        v.streams.length
+          ? `
+            <div class="stream-list">
+              ${v.streams
+                .map((s) => {
+                  const mp4Url = toMp4Url(s.url);
+                  return `
+                    <div class="stream-row">
+                      <div class="stream-meta">
+                        <strong>${escapeHtml(s.resolution || 'Variant')}</strong>
+                        <span class="stream-url">${escapeHtml(s.url)}</span>
+                      </div>
+                      <div class="action-row" style="margin-bottom:0;">
+                        <button type="button" class="btn-ghost copy-stream-btn" data-url="${escapeHtml(s.url)}">M3U8</button>
+                        <a class="btn-pill" href="${escapeHtml(mp4Url)}" target="_blank" rel="noopener noreferrer">MP4</a>
+                      </div>
+                    </div>
+                  `;
+                })
+                .join('')}
+            </div>
+          `
+          : ''
+      }
+    `;
+
+    const videoEl = document.getElementById('activeVariantVideo');
+    if (videoEl && chosenStreamUrl) {
+      attachHlsToVideo(videoEl, chosenStreamUrl);
     }
 
-    hlsQueue.push({ vidId, playUrl });
-    cardsHtml.push(`
-      <div class="motion-card ${isTall ? 'is-tall' : ''}">
-        <video id="${vidId}" autoplay loop muted playsinline poster="${escapeHtml(posterUrl)}"></video>
-        <div><strong>${escapeHtml(label)}</strong></div>
-        <a class="btn-ghost" href="${escapeHtml(masterUrl)}" target="_blank" rel="noopener noreferrer">Master .m3u8</a>
-      </div>
-    `);
-  }
+    container.querySelectorAll('[data-variant-idx]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        selectedIndex = parseInt(btn.dataset.variantIdx, 10);
+        renderVariantDetail(selectedIndex);
+      });
+    });
 
-  const mdLines = ['Animated Artwork'];
-  if (squareMd) {
-    mdLines.push('### Square');
-    const parts = [
-      squareMd.res1080 ? `[1080x1080](<${squareMd.res1080}>)` : '',
-      squareMd.res2160 ? `[2160x2160](<${squareMd.res2160}>)` : '',
-      squareMd.masterUrl ? `[Master M3U8](<${squareMd.masterUrl}>)` : ''
-    ].filter(Boolean);
-    if (parts.length) mdLines.push(parts.join(' • '));
-  }
-  if (tallMd) {
-    mdLines.push('### Tall');
-    const parts = [
-      tallMd.res1080 ? `[1080x1440](<${tallMd.res1080}>)` : '',
-      tallMd.res2048 ? `[2048x2732](<${tallMd.res2048}>)` : '',
-      tallMd.masterUrl ? `[Master M3U8](<${tallMd.masterUrl}>)` : ''
-    ].filter(Boolean);
-    if (parts.length) mdLines.push(parts.join(' • '));
-  }
-  mdLines.push('-# Master M3U8 compatible with Firefox.');
-  const markdownText = mdLines.join('\n');
+    document.getElementById('copyMasterM3u8Btn')?.addEventListener('click', () => {
+      copyToClipboard(v.masterUrl, 'Copied Master M3U8 URL');
+    });
 
-  container.className = '';
-  container.innerHTML = `
-    <div class="motion-grid">${cardsHtml.join('')}</div>
-    <div style="margin-top: 1rem;">
-      <div class="action-row">
-        <button type="button" class="btn-pill" id="copyMarkdownBtn">Copy Markdown</button>
-      </div>
-      <textarea id="modalMarkdownArea" class="md-output" readonly>${escapeHtml(markdownText)}</textarea>
-    </div>
-  `;
+    document.getElementById('copyVariantMdBtn')?.addEventListener('click', () => {
+      copyToClipboard(markdownText, 'Copied variant Markdown');
+    });
 
-  document.getElementById('copyMarkdownBtn')?.addEventListener('click', () => {
-    copyToClipboard(markdownText, 'Copied Markdown');
-  });
+    container.querySelectorAll('.copy-stream-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        copyToClipboard(btn.dataset.url || '', 'Copied M3U8 stream URL');
+      });
+    });
+  };
 
-  for (const { vidId, playUrl } of hlsQueue) {
-    const videoEl = document.getElementById(vidId);
-    if (!videoEl || !playUrl) continue;
-    if (Hls.isSupported()) {
-      const hls = new Hls({ maxBufferLength: 5, maxMaxBufferLength: 10 });
-      hls.loadSource(playUrl);
-      hls.attachMedia(videoEl);
-      activeHlsInstances.push(hls);
-    } else if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
-      videoEl.src = playUrl;
-    }
-  }
+  renderVariantDetail(selectedIndex);
 }
 
 function closeMediaModal() {
@@ -742,14 +1096,17 @@ function closeMediaModal() {
 /* ==========================================================================
    Event Wiring & Initialization
    ========================================================================== */
-async function runSearch(term) {
+async function runSearch(term, { recordHistory = true } = {}) {
   const cleaned = term.trim();
   if (!cleaned) return;
+  if (recordHistory && state.query && cleaned !== state.query) {
+    pushHistory();
+  }
   state.query = cleaned;
   state.viewMode = 'search';
   dom.sidebarSearchInput.value = cleaned;
 
-  dom.contentArea.innerHTML = `${renderTopSearchBar()}<div class="status-card">Searching catalog...</div>`;
+  dom.contentArea.innerHTML = `${renderTopHeader()}<div class="status-card">Searching catalog...</div>`;
   bindMainViewEvents();
   hydrateSfSymbols(dom.contentArea);
 
@@ -757,13 +1114,15 @@ async function runSearch(term) {
     state.searchResults = await fetchCatalogSearch(cleaned, state.storefront);
     renderSearchView();
   } catch (err) {
-    dom.contentArea.innerHTML = `${renderTopSearchBar()}<div class="status-card">Search error: ${escapeHtml(err.message)}</div>`;
+    dom.contentArea.innerHTML = `${renderTopHeader()}<div class="status-card">Search error: ${escapeHtml(err.message)}</div>`;
     bindMainViewEvents();
     hydrateSfSymbols(dom.contentArea);
   }
 }
 
 function bindMainViewEvents() {
+  document.getElementById('backNavBtn')?.addEventListener('click', goBack);
+
   const mainForm = document.getElementById('mainSearchForm');
   const mainInput = document.getElementById('mainSearchInput');
   if (mainForm && mainInput) {
@@ -773,18 +1132,28 @@ function bindMainViewEvents() {
     });
   }
 
+  dom.contentArea.querySelectorAll('[data-filter-nav]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      state.activeNav = btn.dataset.filterNav;
+      syncNavActiveState();
+      renderSearchView();
+    });
+  });
+
   dom.contentArea.querySelectorAll('[data-open-kind][data-open-id]').forEach((el) => {
-    el.addEventListener('click', () => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
       const kind = el.dataset.openKind;
       const id = el.dataset.openId;
       if (kind === 'album') {
         openAlbumDetail(id);
       } else if (kind === 'artist') {
-        const artist = state.searchResults.artists.find((a) => a.id === id);
-        if (artist) runSearch(artist.attributes?.name || '');
+        openArtistDetail(id);
+      } else if (kind === 'playlist') {
+        openPlaylistDetail(id);
       } else if (kind === 'song') {
         const song = state.searchResults.songs.find((s) => s.id === id);
-        const preview = song?.attributes?.previews?.[0]?.url || '';
+        const preview = song?.attributes?.previews?.[0]?.url || el.dataset.previewUrl || '';
         toggleTrackPreview(id, preview, el);
       } else {
         const text = el.querySelector('.top-tile-title, .media-card-title')?.textContent?.trim() || '';
@@ -805,29 +1174,39 @@ function bindMainViewEvents() {
   });
 }
 
+dom.mobileNavToggle?.addEventListener('click', () => {
+  const expanded = dom.sidebar.classList.toggle('is-expanded');
+  dom.mobileNavToggle.setAttribute('aria-expanded', String(expanded));
+});
+
 dom.sidebarSearchForm.addEventListener('submit', (e) => {
   e.preventDefault();
   state.storefront = dom.storefrontInput.value.trim().toLowerCase() || 'us';
   runSearch(dom.sidebarSearchInput.value);
+  dom.sidebar.classList.remove('is-expanded');
 });
 
 dom.storefrontInput.addEventListener('change', () => {
   state.storefront = dom.storefrontInput.value.trim().toLowerCase() || 'us';
-  if (state.query) runSearch(state.query);
+  if (state.query) runSearch(state.query, { recordHistory: false });
 });
 
 dom.navItems.forEach((btn) => {
   btn.addEventListener('click', () => {
-    dom.navItems.forEach((b) => b.classList.remove('is-active'));
-    btn.classList.add('is-active');
+    pushHistory();
     state.activeNav = btn.dataset.nav;
+    syncNavActiveState();
     state.viewMode = 'search';
     renderSearchView();
+    dom.sidebar.classList.remove('is-expanded');
   });
 });
 
 dom.brandResetBtn.addEventListener('click', () => {
+  pushHistory();
   state.viewMode = 'search';
+  state.selectedId = null;
+  state.selectedData = null;
   renderSearchView();
 });
 
