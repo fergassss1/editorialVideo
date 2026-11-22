@@ -9,57 +9,63 @@
 </head>
 <body>
   <div id="app" class="app-shell">
-    <!-- Persistent Left Sidebar -->
-    <aside class="sidebar" aria-label="Primary navigation">
+    <!-- Floating / Sticky Left Sidebar & Responsive Top Bar -->
+    <aside id="sidebar" class="sidebar" aria-label="Primary navigation">
       <div class="sidebar-top">
-        <button id="brandResetBtn" class="brand-logo-btn" type="button" title="Reset view">
-          <img src="assets/logo.svg" alt="Ampm" class="brand-logo" />
-        </button>
-
-        <form id="sidebarSearchForm" class="search-pill" autocomplete="off">
-          <span class="sf-icon search-icon" data-sf-symbol="magnifyingglass" aria-hidden="true"></span>
-          <input
-            id="sidebarSearchInput"
-            type="search"
-            placeholder="Search catalog..."
-            aria-label="Search albums, artists, songs, or playlists"
-          />
-          <input
-            id="storefrontInput"
-            type="text"
-            class="storefront-mini"
-            value="us"
-            maxlength="5"
-            aria-label="Storefront"
-            title="Storefront (e.g. us, gb, jp, es)"
-          />
-        </form>
-
-        <nav class="nav-list" aria-label="Catalog sections">
-          <button type="button" class="nav-item is-active" data-nav="albums">
-            <span class="sf-icon nav-icon" data-sf-symbol="rectangle.stack.fill" aria-hidden="true"></span>
-            <span>Albums</span>
+        <div class="sidebar-brand-row">
+          <button id="brandResetBtn" class="brand-logo-btn" type="button" title="Reset view">
+            <img src="assets/logo.svg" alt="Ampm" class="brand-logo" />
           </button>
-          <button type="button" class="nav-item" data-nav="artists">
-            <span class="sf-icon nav-icon" data-sf-symbol="music.mic" aria-hidden="true"></span>
-            <span>Artists</span>
+          <button id="mobileNavToggle" class="mobile-nav-toggle" type="button" aria-expanded="false" aria-controls="sidebarCollapsible" title="Toggle menu">
+            <span class="sf-icon" data-sf-symbol="line.3.horizontal" aria-hidden="true"></span>
           </button>
-          <button type="button" class="nav-item" data-nav="playlists">
-            <span class="sf-icon nav-icon" data-sf-symbol="music.note.list" aria-hidden="true"></span>
-            <span>Playlists..?</span>
-          </button>
-        </nav>
-      </div>
+        </div>
 
-      <!-- Lower Sidebar Help Legend -->
-      <div class="sidebar-help" aria-label="Usage tips">
-        <div class="sidebar-help-q">?</div>
-        <p>
-          When available, you can click a element to open it's tool.
-          Artwork lets you open links to hi-res static artwork and animated artwork variants. Applies to artist motion and logos.
-          Clicking tracks plays a song preview.
-          Many more of the other elements copy them into clipboard.
-        </p>
+        <div id="sidebarCollapsible" class="sidebar-collapsible">
+          <form id="sidebarSearchForm" class="search-pill" autocomplete="off">
+            <span class="sf-icon search-icon" data-sf-symbol="magnifyingglass" aria-hidden="true"></span>
+            <input
+              id="sidebarSearchInput"
+              type="search"
+              placeholder="Search catalog..."
+              aria-label="Search albums, artists, songs, or playlists"
+            />
+            <input
+              id="storefrontInput"
+              type="text"
+              class="storefront-mini"
+              value="us"
+              maxlength="5"
+              aria-label="Storefront"
+              title="Storefront (e.g. us, gb, jp, es)"
+            />
+          </form>
+
+          <nav class="nav-list" aria-label="Catalog sections">
+            <button type="button" class="nav-item is-active" data-nav="albums">
+              <span class="sf-icon nav-icon" data-sf-symbol="rectangle.stack.fill" aria-hidden="true"></span>
+              <span>Albums</span>
+            </button>
+            <button type="button" class="nav-item" data-nav="artists">
+              <span class="sf-icon nav-icon" data-sf-symbol="music.mic" aria-hidden="true"></span>
+              <span>Artists</span>
+            </button>
+            <button type="button" class="nav-item" data-nav="playlists">
+              <span class="sf-icon nav-icon" data-sf-symbol="music.note.list" aria-hidden="true"></span>
+              <span>Playlists</span>
+            </button>
+          </nav>
+
+          <!-- Lower Sidebar Help Legend -->
+          <div class="sidebar-help" aria-label="Usage tips">
+            <div class="sidebar-help-q">?</div>
+            <p>
+              Click any element to open its tool or view.
+              Artwork opens hi-res static &amp; animated variants, M3U8/MP4 streams, artist motion, and logos.
+              Clicking tracks plays previews; clicking labels copies them.
+            </p>
+          </div>
+        </div>
       </div>
     </aside>
 
@@ -69,7 +75,7 @@
     </main>
   </div>
 
-  <!-- Artwork & Editorial Media Modal -->
+  <!-- Artwork, Streams & Editorial Media Modal -->
   <div id="mediaModal" class="modal-backdrop" hidden>
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <div class="modal-header">
